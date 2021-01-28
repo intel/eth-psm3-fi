@@ -1,0 +1,170 @@
+/* config.h.in.  Generated from configure.ac by autoheader.  */
+
+/* adds build_id to version if it was defined */
+#undef BUILD_ID
+
+/* defined to 1 if libfabric was configured with --enable-debug, 0 otherwise
+   */
+#undef ENABLE_DEBUG
+
+/* Define to 1 if the linker supports alias attribute. */
+#undef HAVE_ALIAS_ATTRIBUTE
+
+/* Set to 1 to use c11 atomic functions */
+#undef HAVE_ATOMICS
+
+/* Set to 1 to use c11 atomic `least` types */
+#undef HAVE_ATOMICS_LEAST_TYPES
+
+/* Set to 1 to use built-in intrincics atomics */
+#undef HAVE_BUILTIN_ATOMICS
+
+/* Set to 1 to use built-in intrinsics memory model aware atomics */
+#undef HAVE_BUILTIN_MM_ATOMICS
+
+/* Define to 1 if clock_gettime is available. */
+#undef HAVE_CLOCK_GETTIME
+
+/* Set to 1 to use cpuid */
+#undef HAVE_CPUID
+
+/* Define to 1 if you have the <cuda_runtime.h> header file. */
+#undef HAVE_CUDA_RUNTIME_H
+
+/* Define to 1 if you have the declaration of `ethtool_cmd_speed', and to 0 if
+   you don't. */
+#undef HAVE_DECL_ETHTOOL_CMD_SPEED
+
+/* Define to 1 if you have the declaration of `SPEED_UNKNOWN', and to 0 if you
+   don't. */
+#undef HAVE_DECL_SPEED_UNKNOWN
+
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the <elf.h> header file. */
+#undef HAVE_ELF_H
+
+/* Define if you have epoll support. */
+#undef HAVE_EPOLL
+
+/* Define to 1 if you have the `epoll_create' function. */
+#undef HAVE_EPOLL_CREATE
+
+/* Set to 1 to use ethtool */
+#undef HAVE_ETHTOOL
+
+/* Define to 1 if you have the `getifaddrs' function. */
+#undef HAVE_GETIFADDRS
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#undef HAVE_INTTYPES_H
+
+/* Whether we have CUDA runtime or not */
+#undef HAVE_LIBCUDA
+
+/* Define to 1 if you have the `dl' library (-ldl). */
+#undef HAVE_LIBDL
+
+/* Define to 1 if you have the `pthread' library (-lpthread). */
+#undef HAVE_LIBPTHREAD
+
+/* Whether we have __builtin_ia32_rdpmc() and linux/perf_event.h file or not
+   */
+#undef HAVE_LINUX_PERF_RDPMC
+
+/* Define to 1 if you have the <linux/userfaultfd.h> header file. */
+#undef HAVE_LINUX_USERFAULTFD_H
+
+/* Define to 1 if you have the <memory.h> header file. */
+#undef HAVE_MEMORY_H
+
+/* psm3_am_register_handlers_2 function is present */
+#undef HAVE_PSM2_AM_REGISTER_HANDLERS_2
+
+/* psm3_mq_fp_msg function is present and enabled */
+#undef HAVE_PSM2_MQ_FP_MSG
+
+/* psm3_mq_ipeek_dequeue_multi function is present and enabled */
+#undef HAVE_PSM2_MQ_REQ_USER
+
+/* Build libfabric PSM3 provider */
+#undef HAVE_PSM3
+
+/* Build libfabric PSM3 provider */
+#undef HAVE_PSM3_DL
+
+/* PSM3 source is built-in */
+#undef HAVE_PSM3_SRC
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#undef HAVE_STDINT_H
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the <strings.h> header file. */
+#undef HAVE_STRINGS_H
+
+/* Define to 1 if you have the <string.h> header file. */
+#undef HAVE_STRING_H
+
+/* Define to 1 if compiler/linker support symbol versioning. */
+#undef HAVE_SYMVER_SUPPORT
+
+/* Define to 1 if you have the <sys/auxv.h> header file. */
+#undef HAVE_SYS_AUXV_H
+
+/* Define to 1 if you have the <sys/stat.h> header file. */
+#undef HAVE_SYS_STAT_H
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#undef HAVE_SYS_TYPES_H
+
+/* Define to 1 if typeof works with your compiler. */
+#undef HAVE_TYPEOF
+
+/* Define to 1 if platform supports userfault fd unmap */
+#undef HAVE_UFFD_UNMAP
+
+/* Define to 1 if you have the <unistd.h> header file. */
+#undef HAVE_UNISTD_H
+
+/* Define to 1 to enable valgrind annotations */
+#undef INCLUDE_VALGRIND
+
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
+#undef LT_OBJDIR
+
+/* Name of package */
+#undef PACKAGE
+
+/* Define to the address where bug reports for this package should be sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
+
+/* Define to 1 if pthread_spin_init is available. */
+#undef PT_LOCK_SPIN
+
+/* Define to 1 if you have the ANSI C header files. */
+#undef STDC_HEADERS
+
+/* Version number of package */
+#undef VERSION
+
+/* Define to __typeof__ if your compiler spells it that way. */
+#undef typeof

@@ -68,8 +68,13 @@ ips_proto_mq_handle_eager,
 ips_proto_mq_handle_rts,                /* RTS */
 ips_proto_mq_handle_cts,                /* CTS */
 ips_proto_mq_handle_data,               /* DATA */
+#ifdef RNDV_MOD
 ips_protoexp_process_err_chk_rdma,		/* ERR_CHK_RDMA */
 ips_protoexp_process_err_chk_rdma_resp,		/* ERR_CHK_RDMA_RESP */
+#else
+ips_proto_process_unknown_opcode,
+ips_proto_process_unknown_opcode,
+#endif
 /* these are control packets */
 ips_proto_process_ack,
 ips_proto_process_nak,
@@ -742,7 +747,7 @@ ips_proto_connect_disconnect(struct ips_recvhdrq_event *rcv_ev)
 					paylen);
 	if (err != PSM2_OK)
 		psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-			"Process connect/disconnect error: %d, opcode %d\n",
+			"Process connect/disconnect error: %d, opcode %x\n",
 			err, _get_proto_hfi_opcode(rcv_ev->p_hdr));
 
 	return IPS_RECVHDRQ_CONTINUE;
@@ -800,7 +805,7 @@ int ips_proto_process_unknown(const struct ips_recvhdrq_event *rcv_ev)
 		ips_proto_show_header(p_hdr, "invalid connidx");
 
 	psmi_handle_error(PSMI_EP_LOGEVENT, PSM2_EPID_NETWORK_ERROR,
-			 "Received message(s) opcode=0x%x from an unknown process", opcode);
+			 "Received message(s) opcode=%x from an unknown process", opcode);
 
 	return 0;		/* Always skip this packet unless the above call was a noreturn
 				 * call */

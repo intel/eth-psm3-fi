@@ -63,6 +63,9 @@
 #include "mpspawn_stats.h"
 
 #define PSMI_STATSTYPE_MQ	    	0x00001
+#ifdef PSM_CUDA
+#define PSMI_STATSTYPE_CUDA	    	0x00002 /* count of cuda calls */
+#endif
 #define PSMI_STATSTYPE_RCVTHREAD    0x00100	/* num_wakups, ratio, etc. */
 #define PSMI_STATSTYPE_IPSPROTO	    0x00200	/* acks,naks,err_chks */
 #define PSMI_STATSTYPE_TIDS	    	0x00400
@@ -71,8 +74,10 @@
 #endif
 #define PSMI_STATSTYPE_MR_CACHE	    0x00800
 #define PSMI_STATSTYPE_MEMORY	    0x01000
+#ifdef RNDV_MOD
 #define PSMI_STATSTYPE_RV_EVENT	    0x02000	/* RV user event */
 #define PSMI_STATSTYPE_RV_RDMA	    0x04000	/* RV shared conn RDMA */
+#endif
 #define PSMI_STATSTYPE_FAULTINJ	    0x08000	/* fault injection - PSM_FI */
 #define PSMI_STATSTYPE_ALL	    	0xfffff
 #define _PSMI_STATSTYPE_SHOWZERO	0x100000
@@ -136,14 +141,16 @@ psm2_error_t
 psmi_stats_register_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
-			 int num_entries, uint64_t id, void *context);
+			 int num_entries, uint64_t id, void *context,
+			 const char *info);
 
 /* deregister old copy and register a new one in it's place */
 psm2_error_t
 psmi_stats_reregister_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
-			 int num_entries, uint64_t id, void *context);
+			 int num_entries, uint64_t id, void *context,
+			 const char *info);
 
 psm2_error_t psmi_stats_deregister_type(uint32_t statstype, void *context);
 

@@ -77,7 +77,7 @@ void **ips_recvq_egrbuf_table_alloc(psm2_ep_t ep, void *baseptr,
 	/* First pointer is to the actual allocated address, so we can free it but
 	 * buft[1] is first on the page boundary
 	 */
-	buft = (uintptr_t *) PSMI_ALIGNUP(ptr_alloc + 1, PSMI_PAGESIZE);
+	buft = (uintptr_t *) PSMI_ALIGNUP((uint8_t *)ptr_alloc + 1, PSMI_PAGESIZE);
 	buft[-1] = (uintptr_t) ptr_alloc;
 	for (i = 0; i < bufnum; i++)
 		buft[i] = (uintptr_t) ((char *)base + i * bufsize);

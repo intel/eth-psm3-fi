@@ -58,7 +58,7 @@
 #include "opa_intf.h"
 #include "psm_user.h"
 
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(HAVE_PSM3_DWORD_FAST)
 #define hfi_dwordcpy hfi_dwordcpy_safe
 #define hfi_qwordcpy hfi_qwordcpy_safe
 #endif
@@ -91,20 +91,19 @@ void hfi_dwordcpy(volatile uint32_t *dest, const uint32_t *src, uint32_t ndwords
 		dest = (volatile uint32_t *) dst64[0];
 
 		switch (ndw) {
-		case 7:
-			*dest++ = *src++;
-		case 6:
-			*dest++ = *src++;
-		case 5:
-			*dest++ = *src++;
-		case 4:
-			*dest++ = *src++;
-		case 3:
-			*dest++ = *src++;
-		case 2:
-			*dest++ = *src++;
-		case 1:
-			*dest++ = *src++;
+		case 7: *dest++ = *src++;
+		/* fall through */
+		case 6: *dest++ = *src++;
+		/* fall through */
+		case 5: *dest++ = *src++;
+		/* fall through */
+		case 4: *dest++ = *src++;
+		/* fall through */
+		case 3: *dest++ = *src++;
+		/* fall through */
+		case 2:	*dest++ = *src++;
+		/* fall through */
+		case 1: *dest++ = *src++;
 		}
 
 	}
@@ -149,20 +148,19 @@ void hfi_qwordcpy(volatile uint64_t *dest, const uint64_t *src, uint32_t nqwords
 	}
 	if (nqw) {
 		switch (nqw) {
-		case 7:
-			*(dst64[0])++ = *(src64[0])++;
-		case 6:
-			*(dst64[0])++ = *(src64[0])++;
-		case 5:
-			*(dst64[0])++ = *(src64[0])++;
-		case 4:
-			*(dst64[0])++ = *(src64[0])++;
-		case 3:
-			*(dst64[0])++ = *(src64[0])++;
-		case 2:
-			*(dst64[0])++ = *(src64[0])++;
-		case 1:
-			*(dst64[0])++ = *(src64[0])++;
+		case 7: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 6: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 5: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 4: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 3: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 2: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 1: *(dst64[0])++ = *(src64[0])++;
 		}
 	}
 }
@@ -297,7 +295,7 @@ void MOCKABLE(psmi_mq_mtucpy)(void *vdest, const void *vsrc, uint32_t nchars)
 {
 
 #ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED && (PSMI_IS_CUDA_MEM(vdest) || PSMI_IS_CUDA_MEM((void *) vsrc))) {
+	if (nchars && PSMI_IS_CUDA_ENABLED && (PSMI_IS_CUDA_MEM(vdest) || PSMI_IS_CUDA_MEM((void *) vsrc))) {
 		PSMI_CUDA_CALL(cuMemcpy,
 			       (CUdeviceptr)vdest, (CUdeviceptr)vsrc, nchars);
 		return;

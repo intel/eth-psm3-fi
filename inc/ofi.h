@@ -133,8 +133,6 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 #define ofi_val64_inrange(start, length, value) \
     ofi_val64_ge(value, start) && ofi_val64_lt(value, start + length)
 
-#define OFI_MAGIC_64 (0x0F1C0DE0F1C0DE64)
-
 #ifndef BIT
 #define BIT(nr) (1UL << (nr))
 #endif
@@ -157,17 +155,11 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 
 #define TAB "    "
 
-#define CASEENUMSTR(SYM) \
-	case SYM: { ofi_strcatf(buf, #SYM); break; }
-#define IFFLAGSTR(flags, SYM) \
-	do { if (flags & SYM) ofi_strcatf(buf, #SYM ", "); } while(0)
 #define CASEENUMSTRN(SYM, N) \
 	case SYM: { ofi_strncatf(buf, N, #SYM); break; }
 #define IFFLAGSTRN(flags, SYM, N) \
 	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
 
-#define ofi_strcatf(dest, ...) \
-	ofi_strncatf(dest, OFI_BUFSIZ, __VA_ARGS__)
 
 /*
  * CPU specific features
@@ -272,8 +264,13 @@ static inline void *ofi_get_page_end(const void *addr, size_t page_size)
 static inline size_t
 ofi_get_page_bytes(const void *addr, size_t len, size_t page_size)
 {
-	return (char *)ofi_get_page_end((const char *) addr + len, page_size) -
-	       (char *)ofi_get_page_start(addr, page_size);
+	char *start = ofi_get_page_start(addr, page_size);
+	char *end = (char *)ofi_get_page_start((const char*)addr + len - 1, page_size)
+		    + page_size;
+	size_t result = end - start;
+
+	assert(result % page_size == 0);
+	return result;
 }
 
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
@@ -286,10 +283,13 @@ uint8_t ofi_lsb(uint64_t num);
 
 extern size_t ofi_universe_size;
 
-int ofi_send_allowed(uint64_t caps);
-int ofi_recv_allowed(uint64_t caps);
-int ofi_rma_initiate_allowed(uint64_t caps);
-int ofi_rma_target_allowed(uint64_t caps);
+bool ofi_send_allowed(uint64_t caps);
+bool ofi_recv_allowed(uint64_t caps);
+bool ofi_rma_initiate_allowed(uint64_t caps);
+bool ofi_rma_target_allowed(uint64_t caps);
+bool ofi_needs_tx(uint64_t caps);
+bool ofi_needs_rx(uint64_t caps);
+
 int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid,
 		      uint64_t flags);
 int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);

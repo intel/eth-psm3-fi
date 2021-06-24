@@ -3,8 +3,8 @@
 %{!?provider_formal: %define provider_formal PSM3}
 
 Name: lib%{provider}-fi
-Version: 1.11.2
-Release: 88
+Version: 11.1.0.0
+Release: 1162
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries
@@ -15,6 +15,17 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Requires: libfabric
 %if 0%{?suse_version} >= 1
 Provides: lib${provider}-fi1 = %{version}-%{release}
+%endif
+
+BuildRequires: libuuid-devel
+BuildRequires: rdma-core-devel
+%if 0%{?suse_version} >= 1
+BuildRequires: glibc-devel
+BuildRequires: libnuma-devel
+%endif
+%if 0%{?rhel} >= 1
+BuildRequires: glibc-headers
+BuildRequires: numactl-devel
 %endif
 
 %description
@@ -52,5 +63,8 @@ rm -rf %{buildroot}
 %exclude %{_mandir}
 
 %changelog
+* Wed Mar 31 2021 Adam Goldman <adam.goldman@intel.com>
+- Include BuildRequires lines for RHEL and SLES
+
 * Wed May 24 2017 Open Fabrics Interfaces Working Group <ofiwg@lists.openfabrics.org>
 - First release of specfile for packaging a single dl provider.

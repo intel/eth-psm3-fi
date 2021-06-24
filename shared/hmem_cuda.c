@@ -50,7 +50,13 @@ struct cuda_ops {
 	CUresult (*cuPointerGetAttribute)(void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
+	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
+					unsigned int flags);
+	cudaError_t (*cudaHostUnregister)(void *ptr);
+	cudaError_t (*cudaGetDeviceCount)(int *count);
 };
+
+static int hmem_cuda_use_gdrcopy;
 
 #ifdef ENABLE_CUDA_DLOPEN
 
@@ -67,6 +73,9 @@ static struct cuda_ops cuda_ops = {
 	.cudaGetErrorName = cudaGetErrorName,
 	.cudaGetErrorString = cudaGetErrorString,
 	.cuPointerGetAttribute = cuPointerGetAttribute,
+	.cudaHostRegister = cudaHostRegister,
+	.cudaHostUnregister = cudaHostUnregister,
+	.cudaGetDeviceCount = cudaGetDeviceCount,
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -93,8 +102,28 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
 }
 
+cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags)
+{
+	return cuda_ops.cudaHostRegister(ptr, size, flags);
+}
+
+cudaError_t ofi_cudaHostUnregister(void *ptr)
+{
+	return cuda_ops.cudaHostUnregister(ptr);
+}
+
+static cudaError_t ofi_cudaGetDeviceCount(int *count)
+{
+	return cuda_ops.cudaGetDeviceCount(count);
+}
+
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 {
+	if (hmem_cuda_use_gdrcopy) {
+		cuda_gdrcopy_to_dev(device, dev, host, size);
+		return FI_SUCCESS;
+	}
+
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
@@ -111,6 +140,11 @@ int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
 {
+	if (hmem_cuda_use_gdrcopy) {
+		cuda_gdrcopy_from_dev(device, host, dev, size);
+		return FI_SUCCESS;
+	}
+
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
@@ -123,6 +157,23 @@ int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size
 		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
+}
+
+int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
+{
+	if (hmem_cuda_use_gdrcopy)
+		return cuda_gdrcopy_dev_register(mr_attr, handle);
+
+	*handle = mr_attr->device.cuda;
+	return FI_SUCCESS;
+}
+
+int cuda_dev_unregister(uint64_t handle)
+{
+	if (hmem_cuda_use_gdrcopy)
+		return cuda_gdrcopy_dev_unregister(handle);
+
+	return FI_SUCCESS;
 }
 
 static int cuda_hmem_dl_init(void)
@@ -174,6 +225,29 @@ static int cuda_hmem_dl_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cudaHostRegister = dlsym(cudart_handle, "cudaHostRegister");
+	if (!cuda_ops.cudaHostRegister) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaHostRegister\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cudaHostUnregister = dlsym(cudart_handle,
+					    "cudaHostUnregister");
+	if (!cuda_ops.cudaHostUnregister) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaHostUnregister\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cudaGetDeviceCount = dlsym(cudart_handle,
+					    "cudaGetDeviceCount");
+	if (!cuda_ops.cudaGetDeviceCount) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaGetDeviceCount\n");
+		goto err_dlclose_cuda;
+	}
+
 	return FI_SUCCESS;
 
 err_dlclose_cuda:
@@ -187,18 +261,82 @@ err_dlclose_cudart:
 #endif /* ENABLE_CUDA_DLOPEN */
 }
 
-int cuda_hmem_init(void)
-{
-	return cuda_hmem_dl_init();
-}
-
-int cuda_hmem_cleanup(void)
+static void cuda_hmem_dl_cleanup(void)
 {
 #ifdef ENABLE_CUDA_DLOPEN
 	dlclose(cuda_handle);
 	dlclose(cudart_handle);
 #endif
+}
 
+static int cuda_hmem_verify_devices(void)
+{
+	int device_count;
+	cudaError_t cuda_ret;
+
+	/* Verify CUDA compute-capable devices are present on the host. */
+	cuda_ret = ofi_cudaGetDeviceCount(&device_count);
+	switch (cuda_ret) {
+	case cudaSuccess:
+		break;
+
+	case cudaErrorNoDevice:
+		return -FI_ENOSYS;
+
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform cudaGetDeviceCount: %s:%s\n",
+			ofi_cudaGetErrorName(cuda_ret),
+			ofi_cudaGetErrorString(cuda_ret));
+		return -FI_EIO;
+	}
+
+	if (device_count == 0)
+		return -FI_ENOSYS;
+
+	return FI_SUCCESS;
+}
+
+int cuda_hmem_init(void)
+{
+	int ret;
+	int gdrcopy_ret;
+
+	ret = cuda_hmem_dl_init();
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ret = cuda_hmem_verify_devices();
+	if (ret != FI_SUCCESS)
+		goto dl_cleanup;
+
+	gdrcopy_ret = cuda_gdrcopy_hmem_init();
+	if (gdrcopy_ret == FI_SUCCESS) {
+		hmem_cuda_use_gdrcopy = 1;
+		fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
+				"Use gdrcopy to copy data to/from GPU memory");
+		fi_param_get_bool(NULL, "hmem_cuda_use_gdrcopy",
+				  &hmem_cuda_use_gdrcopy);
+	} else {
+		hmem_cuda_use_gdrcopy = 0;
+		if (gdrcopy_ret != -FI_ENOSYS)
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"gdrcopy initialization failed! gdrcopy will not be used.\n");
+	}
+
+	return ret;
+
+dl_cleanup:
+	cuda_hmem_dl_cleanup();
+
+	return ret;
+}
+
+int cuda_hmem_cleanup(void)
+{
+	cuda_hmem_dl_cleanup();
+	if (hmem_cuda_use_gdrcopy)
+		cuda_gdrcopy_hmem_cleanup();
 	return FI_SUCCESS;
 }
 
@@ -248,6 +386,38 @@ bool cuda_is_addr_valid(const void *addr)
 	return false;
 }
 
+int cuda_host_register(void *ptr, size_t size)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = ofi_cudaHostRegister(ptr, size, cudaHostRegisterDefault);
+	if (cuda_ret == cudaSuccess)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform cudaMemcpy: %s:%s\n",
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
+
+	return -FI_EIO;
+}
+
+int cuda_host_unregister(void *ptr)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = ofi_cudaHostUnregister(ptr);
+	if (cuda_ret == cudaSuccess)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform cudaMemcpy: %s:%s\n",
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
+
+	return -FI_EIO;
+}
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -273,6 +443,26 @@ int cuda_hmem_cleanup(void)
 bool cuda_is_addr_valid(const void *addr)
 {
 	return false;
+}
+
+int cuda_host_register(void *ptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_host_unregister(void *ptr)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
+{
+	return FI_SUCCESS;
+}
+
+int cuda_dev_unregister(uint64_t handle)
+{
+	return FI_SUCCESS;
 }
 
 #endif /* HAVE_LIBCUDA */

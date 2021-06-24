@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2021 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,6 +37,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/un.h>
 
 #include <ofi_atom.h>
 #include <ofi_proto.h>
@@ -65,6 +66,7 @@ extern "C" {
 #define SMR_FLAG_DEBUG	(0 << 1)
 #endif
 
+#define SMR_FLAG_IPC_SOCK (1 << 2)
 
 #define SMR_CMD_SIZE		128	/* align with 64-byte cache line */
 
@@ -80,7 +82,7 @@ enum {
 
 //reserves 0-255 for defined ops and room for new ops
 //256 and beyond reserved for ctrl ops
-#define SMR_OP_MAX (1 << 8) 
+#define SMR_OP_MAX (1 << 8)
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
 #define SMR_RMA_REQ		(1 << 1)
@@ -95,7 +97,7 @@ enum {
 	SMR_CMA_CAP_OFF,
 };
 
-/* 
+/*
  * Unique smr_op_hdr for smr message protocol:
  * 	addr - local shm_id of peer sending msg (for shm lookup)
  * 	op - type of op (ex. ofi_op_msg, defined in ofi_proto.h)
@@ -130,7 +132,12 @@ struct smr_msg_hdr {
 struct smr_ipc_info {
 	uint64_t	iface;
 	union {
-		uint8_t	ipc_handle[IPC_HANDLE_SIZE];
+		uint8_t		ipc_handle[IPC_HANDLE_SIZE];
+		struct {
+			uint64_t	device;
+			uint64_t	offset;
+			uint64_t	fd_handle;
+		};
 	};
 };
 
@@ -179,6 +186,7 @@ struct smr_cmd {
 #define SMR_SAR_SIZE		16384
 
 #define SMR_NAME_MAX		256
+#define SMR_SOCK_NAME_MAX sizeof(((struct sockaddr_un *)0)->sun_path)
 
 struct smr_addr {
 	char		name[SMR_NAME_MAX];
@@ -222,7 +230,8 @@ struct smr_region {
 	uint8_t		resv;
 	uint16_t	flags;
 	int		pid;
-	uint8_t		cma_cap;
+	uint8_t		cma_cap_peer;
+	uint8_t		cma_cap_self;
 	void		*base_addr;
 	fastlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
@@ -245,6 +254,7 @@ struct smr_region {
 	size_t		sar_pool_offset;
 	size_t		peer_data_offset;
 	size_t		name_offset;
+	size_t		sock_name_offset;
 };
 
 struct smr_resp {
@@ -278,8 +288,8 @@ struct smr_sar_msg {
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
-DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool);
-DECLARE_SMR_FREESTACK(struct smr_sar_msg, smr_sar_pool);
+SMR_DECLARE_FREESTACK(struct smr_inject_buf, smr_inject_pool);
+SMR_DECLARE_FREESTACK(struct smr_sar_msg, smr_sar_pool);
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
@@ -299,15 +309,20 @@ static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
 }
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
-	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset); 
+	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset);
 }
 static inline struct smr_sar_pool *smr_sar_pool(struct smr_region *smr)
 {
-	return (struct smr_sar_pool *) ((char *) smr + smr->sar_pool_offset); 
+	return (struct smr_sar_pool *) ((char *) smr + smr->sar_pool_offset);
 }
 static inline const char *smr_name(struct smr_region *smr)
 {
 	return (const char *) smr + smr->name_offset;
+}
+
+static inline char *smr_sock_name(struct smr_region *smr)
+{
+	return (char *) smr + smr->sock_name_offset;
 }
 
 static inline void smr_set_map(struct smr_region *smr, struct smr_map *map)
@@ -324,7 +339,8 @@ struct smr_attr {
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 				  size_t *cmd_offset, size_t *resp_offset,
 				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset);
+				  size_t *peer_offset, size_t *name_offset,
+				  size_t *sock_offset);
 void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);
 void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,

@@ -88,7 +88,7 @@ psmi_mq_fastpath_disable(psm2_mq_t mq)
 	for (curp = &qp->first; (cur = *curp) != NULL; curp = &cur->next[t]) {
 		mq->unexpected_hash_len++;
 		hashvals[PSM2_TAG_SRC] =
-			hash_64(*(uint64_t *) cur->req_data.tag.tag) % NUM_HASH_BUCKETS;
+			hash_64(cur->req_data.tag.tag64) % NUM_HASH_BUCKETS;
 		hashvals[PSM2_TAG_ANYSRC] =
 			hash_32(cur->req_data.tag.tag[0]) % NUM_HASH_BUCKETS;
 		hashvals[PSM2_ANYTAG_SRC] =
@@ -108,7 +108,7 @@ psmi_mq_fastpath_disable(psm2_mq_t mq)
 		    (cur->req_data.tagsel.tag[1] == 0xFFFFFFFF)) {
 			/* hash tag0 and tag1 */
 			t = PSM2_TAG_SRC;
-			hashvals[t] = hash_64(*(uint64_t *) cur->req_data.tag.tag) % NUM_HASH_BUCKETS;
+			hashvals[t] = hash_64(cur->req_data.tag.tag64) % NUM_HASH_BUCKETS;
 			mq_qq_append_which(mq->expected_htab,
 					   t, hashvals[t], cur);
 		} else if (cur->req_data.tagsel.tag[0] == 0xFFFFFFFF) {
@@ -176,7 +176,7 @@ mq_req_match_with_tagsel(psm2_mq_t mq, psm2_epaddr_t src,
 	} else if ((tagsel->tag[0] == 0xFFFFFFFF) &&
 		   (tagsel->tag[1] == 0xFFFFFFFF)) {
 		i = PSM2_TAG_SRC;
-		hashval = hash_64(*(uint64_t *) tag->tag) % NUM_HASH_BUCKETS;
+		hashval = hash_64(tag->tag64) % NUM_HASH_BUCKETS;
 		qp = &mq->unexpected_htab[i][hashval];
 	} else if (tagsel->tag[0] == 0xFFFFFFFF) {
 		i = PSM2_TAG_ANYSRC;
@@ -229,7 +229,7 @@ static void mq_add_to_expected_hashes(psm2_mq_t mq, psm2_mq_req_t req)
 	} else if ((req->req_data.tagsel.tag[0] == 0xFFFFFFFF) &&
 		   (req->req_data.tagsel.tag[1] == 0xFFFFFFFF)) {
 		i = PSM2_TAG_SRC;
-		hashval = hash_64(*(uint64_t *) req->req_data.tag.tag) % NUM_HASH_BUCKETS;
+		hashval = hash_64(req->req_data.tag.tag64) % NUM_HASH_BUCKETS;
 		mq_qq_append_which(mq->expected_htab, i, hashval, req);
 		mq->expected_hash_len++;
 	} else if (req->req_data.tagsel.tag[0] == 0xFFFFFFFF) {
@@ -345,11 +345,11 @@ __psm2_mq_iprobe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
 	PSM2_LOG_MSG("entering");
 	PSMI_ASSERT_INITIALIZED();
 
-	*(uint64_t *) rtag.tag = tag;
+	rtag.tag64 = tag;
 #ifdef PSM_DEBUG
 	rtag.tag[2] = 0;
 #endif
-	*(uint64_t *) rtagsel.tag = tagsel;
+	rtagsel.tag64 = tagsel;
 	rtagsel.tag[2] = 0;
 
 	req = psmi_mq_iprobe_inner(mq, PSM2_MQ_ANY_ADDR, &rtag, &rtagsel, 0);
@@ -407,11 +407,11 @@ __psm2_mq_improbe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
 	PSM2_LOG_MSG("entering");
 	PSMI_ASSERT_INITIALIZED();
 
-	*(uint64_t *) rtag.tag = tag;
+	rtag.tag64 = tag;
 #ifdef PSM_DEBUG
 	rtag.tag[2] = 0;
 #endif
-	*(uint64_t *) rtagsel.tag = tagsel;
+	rtagsel.tag64 = tagsel;
 	rtagsel.tag[2] = 0;
 
 	req = psmi_mq_iprobe_inner(mq, PSM2_MQ_ANY_ADDR, &rtag, &rtagsel, 1);
@@ -694,7 +694,7 @@ __psm2_mq_isend(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 
 	PSM2_LOG_MSG("entering");
 
-	*((uint64_t *) tag.tag) = stag;
+	tag.tag64 = stag;
 	tag.tag[2] = 0;
 
 	PSMI_ASSERT_INITIALIZED();
@@ -741,7 +741,7 @@ __psm2_mq_send(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 
 	PSM2_LOG_MSG("entering stag: 0x%" PRIx64, stag);
 
-	*((uint64_t *) tag.tag) = stag;
+	tag.tag64 = stag;
 	tag.tag[2] = 0;
 
 	PSMI_ASSERT_INITIALIZED();
@@ -763,41 +763,23 @@ PSMI_API_DECL(psm2_mq_send)
 static psm2_error_t
 psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 {
-	uint32_t copysz;
+	uint32_t msglen;
 
 	PSM2_LOG_MSG("entering");
 	psmi_assert(MQE_TYPE_IS_RECV(req->type));
-	psmi_mtucpy_fn_t psmi_mtucpy_fn = psmi_mq_mtucpy;
-#if defined(PSM_CUDA)
-	int converted = 0;
-	if (!req->is_buf_gpu_mem)
-		psmi_mtucpy_fn = psmi_mq_mtucpy_host_mem;
-#endif // PSM_CUDA
 
 	_HFI_VDBG("(req=%p) buf=%p len=%u req.state=%u\n", req, buf, len, req->state);
 
 	switch (req->state) {
 	case MQ_STATE_COMPLETE:
 		if (req->req_data.buf != NULL) {	/* 0-byte messages don't alloc a sysbuf */
-			copysz = mq_set_msglen(req, len, req->req_data.send_msglen);
-			void *ubuf = buf;
-#ifdef PSM_CUDA
-			if (PSMI_USE_GDR_COPY(req, len)) {
-				ubuf = gdr_convert_gpu_to_host_addr(GDR_FD, (unsigned long)buf,
-								    len, 1,
-								    mq->ep->epaddr->proto);
-				psmi_mtucpy_fn = psmi_mq_mtucpy_host_mem;
-				converted = 1;
-			}
-#endif // PSM_CUDA
-			psmi_mtucpy_fn(ubuf, (const void *)req->req_data.buf, copysz);
-#if defined(PSM_CUDA)
-			if (converted) {
-				gdr_unmap_gpu_host_addr(GDR_FD, ubuf, len,
-                                    mq->ep->epaddr->proto);
-			}
-#endif // PSM_CUDA
+			msglen = mq_set_msglen(req, len, req->req_data.send_msglen);
+			psmi_mq_recv_copy(mq, req, buf, len, msglen);
 			psmi_mq_sysbuf_free(mq, req->req_data.buf);
+#ifdef PSM_CUDA
+		} else {
+			mq->stats.rx_sysbuf_cpu_num++;
+#endif
 		}
 		req->req_data.buf = buf;
 		req->req_data.buf_len = len;
@@ -805,32 +787,12 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 		break;
 
 	case MQ_STATE_UNEXP:	/* not done yet */
-		copysz = mq_set_msglen(req, len, req->req_data.send_msglen);
+		msglen = mq_set_msglen(req, len, req->req_data.send_msglen);
 		/* Copy What's been received so far and make sure we don't receive
 		 * any more than copysz.  After that, swap system with user buffer
 		 */
-		req->recv_msgoff = min(req->recv_msgoff, copysz);
-
-#ifdef PSM_CUDA
-		if (PSMI_USE_GDR_COPY(req, req->req_data.send_msglen)) {
-			buf = gdr_convert_gpu_to_host_addr(GDR_FD, (unsigned long)req->user_gpu_buffer,
-							   req->req_data.send_msglen, 1,
-							   mq->ep->epaddr->proto);
-			psmi_mtucpy_fn = psmi_mq_mtucpy_host_mem;
-			converted = 1;
-		}
-#endif // PSM_CUDA
-
-		if (req->recv_msgoff) {
-			psmi_mtucpy_fn(buf, (const void *)req->req_data.buf,
-				       req->recv_msgoff);
-		}
-#if defined(PSM_CUDA)
-		if (converted) {
-			gdr_unmap_gpu_host_addr(GDR_FD, buf, req->req_data.send_msglen,
-                                   mq->ep->epaddr->proto);
-		}
-#endif // PSM_CUDA
+		req->recv_msgoff = min(req->recv_msgoff, msglen);
+		psmi_mq_recv_copy(mq, req, buf, len, req->recv_msgoff);
 		psmi_mq_sysbuf_free(mq, req->req_data.buf);
 
 		req->state = MQ_STATE_MATCHED;
@@ -839,16 +801,13 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 		break;
 
 	case MQ_STATE_UNEXP_RV:	/* rendez-vous ... */
-		copysz = mq_set_msglen(req, len, req->req_data.send_msglen);
+		msglen = mq_set_msglen(req, len, req->req_data.send_msglen);
 		/* Copy What's been received so far and make sure we don't receive
 		 * any more than copysz.  After that, swap system with user buffer
 		 */
-		req->recv_msgoff = min(req->recv_msgoff, copysz);
-		if (req->recv_msgoff) {
-			psmi_mtucpy_fn(buf, (const void *)req->req_data.buf,
-				       req->recv_msgoff);
-		}
-		if (req->send_msgoff) {
+		req->recv_msgoff = min(req->recv_msgoff, msglen);
+		if (req->send_msgoff) {	// only have sysbuf if RTS w/payload
+			psmi_mq_recv_copy(mq, req, buf, len, req->recv_msgoff);
 			psmi_mq_sysbuf_free(mq, req->req_data.buf);
 		}
 
@@ -900,7 +859,7 @@ __psm2_mq_fp_msg(psm2_ep_t ep, psm2_mq_t mq, psm2_epaddr_t addr, psm2_mq_tag_t *
 		int gpu_mem = 0;
 		void *gpu_user_buffer = NULL;
 
-		if (PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(buf)) {
+		if (len && PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(buf)) {
 			psmi_cuda_set_attr_sync_memops(buf);
 
 			gpu_mem = 1;
@@ -979,7 +938,7 @@ __psm2_mq_irecv2(psm2_mq_t mq, psm2_epaddr_t src,
 #ifdef PSM_CUDA
 	int gpu_mem = 0;
 
-	if (PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(buf)) {
+	if (len && PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(buf)) {
 		psmi_cuda_set_attr_sync_memops(buf);
 
 		gpu_mem = 1;
@@ -1065,11 +1024,11 @@ __psm2_mq_irecv(psm2_mq_t mq, uint64_t tag, uint64_t tagsel, uint32_t flags,
 
 	PSM2_LOG_MSG("entering tag: 0x%" PRIx64, tag);
 
-	*(uint64_t *) rtag.tag = tag;
+	rtag.tag64 = tag;
 #ifdef PSM_DEBUG
 	rtag.tag[2] = 0;
 #endif
-	*(uint64_t *) rtagsel.tag = tagsel;
+	rtagsel.tag64 = tagsel;
 	rtagsel.tag[2] = 0;
 	rv = __psm2_mq_irecv2(mq, PSM2_MQ_ANY_ADDR, &rtag, &rtagsel,
 			       flags, buf, len, context, reqo);
@@ -1100,11 +1059,13 @@ __psm2_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
 		req->req_data.context = context;
 
 #ifdef PSM_CUDA
-		if (PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(buf)) {
+		if (len && PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(buf)) {
 			psmi_cuda_set_attr_sync_memops(buf);
 			req->is_buf_gpu_mem = 1;
+			req->user_gpu_buffer = buf;
 		} else {
 			req->is_buf_gpu_mem = 0;
+			req->user_gpu_buffer = NULL;
 		}
 #endif
 
@@ -1508,7 +1469,7 @@ void __psm2_mq_get_stats(psm2_mq_t mq, psm2_mq_stats_t *stats)
 }
 PSMI_API_DECL(psm2_mq_get_stats)
 
-static psm2_error_t psmi_mq_initstats(psm2_mq_t mq)
+psm2_error_t psmi_mq_initstats(psm2_mq_t mq, psm2_epid_t epid)
 {
 	 struct psmi_stats_entry entries[] = {
 		PSMI_STATS_DECL("COMM_WORLD_Rank",
@@ -1527,12 +1488,25 @@ static psm2_error_t psmi_mq_initstats(psm2_mq_t mq)
 		PSMI_STATS_DECLU64("shm_count_recv", &mq->stats.rx_shm_num),
 		PSMI_STATS_DECLU64("sysbuf_count", &mq->stats.rx_sysbuf_num),
 		PSMI_STATS_DECLU64("sysbuf_bytes", &mq->stats.rx_sysbuf_bytes),
+#ifdef PSM_CUDA
+		PSMI_STATS_DECLU64("Eager_cpu_count_sent", &mq->stats.tx_eager_cpu_num),
+		PSMI_STATS_DECLU64("Eager_cpu_bytes_sent", &mq->stats.tx_eager_cpu_bytes),
+		PSMI_STATS_DECLU64("Eager_gpu_count_sent", &mq->stats.tx_eager_gpu_num),
+		PSMI_STATS_DECLU64("Eager_gpu_bytes_sent", &mq->stats.tx_eager_gpu_bytes),
+		PSMI_STATS_DECLU64("sysbuf_cpu_count", &mq->stats.rx_sysbuf_cpu_num),
+		PSMI_STATS_DECLU64("sysbuf_cpu_bytes", &mq->stats.rx_sysbuf_cpu_bytes),
+		PSMI_STATS_DECLU64("sysbuf_gdrcopy_count", &mq->stats.rx_sysbuf_gdrcopy_num),
+		PSMI_STATS_DECLU64("sysbuf_gdrcopy_bytes", &mq->stats.rx_sysbuf_gdrcopy_bytes),
+		PSMI_STATS_DECLU64("sysbuf_cuCopy_count", &mq->stats.rx_sysbuf_cuCopy_num),
+		PSMI_STATS_DECLU64("sysbuf_cuCopy_bytes", &mq->stats.rx_sysbuf_cuCopy_bytes),
+#endif
 	};
 
 	return psmi_stats_register_type("MPI_Statistics_Summary",
 					PSMI_STATSTYPE_MQ,
 					entries,
-					PSMI_STATS_HOWMANY(entries), 0, mq);
+					PSMI_STATS_HOWMANY(entries),
+					epid, mq, NULL);
 }
 
 psm2_error_t psmi_mq_malloc(psm2_mq_t *mqo)
@@ -1588,7 +1562,6 @@ psm2_error_t psmi_mq_malloc(psm2_mq_t *mqo)
 	err = psmi_mq_req_init(mq);
 	if (err)
 		goto fail;
-	psmi_mq_initstats(mq);
 
 	*mqo = mq;
 
@@ -1604,8 +1577,8 @@ psm2_error_t psmi_mq_initialize_defaults(psm2_mq_t mq)
 	union psmi_envvar_val env_hfitiny, env_rvwin, env_hfirv,
 		env_shmrv, env_stats;
 
-	psmi_getenv("PSM3_MQ_TINY_NIC_THRESH",
-		    "NIC tiny packet switchover (max 8, default 8)",
+	psmi_getenv("PSM3_MQ_TINY_NIC_LIMIT",
+		    "NIC tiny packet limit (max 8, default 8)",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)mq->hfi_thresh_tiny, &env_hfitiny);
 	mq->hfi_thresh_tiny = min(env_hfitiny.e_uint, 8);

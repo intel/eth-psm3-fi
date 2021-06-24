@@ -119,64 +119,66 @@ uint8_t ofi_lsb(uint64_t num)
 	return ofi_msb(num & (~(num - 1)));
 }
 
-int ofi_send_allowed(uint64_t caps)
+bool ofi_send_allowed(uint64_t caps)
 {
-	if (caps & FI_MSG ||
-		caps & FI_TAGGED) {
+	if ((caps & FI_MSG) || (caps & FI_TAGGED)) {
 		if (caps & FI_SEND)
-			return 1;
+			return true;
 		if (caps & FI_RECV)
-			return 0;
-		return 1;
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
-int ofi_recv_allowed(uint64_t caps)
+bool ofi_recv_allowed(uint64_t caps)
 {
-	if (caps & FI_MSG ||
-		caps & FI_TAGGED) {
+	if ((caps & FI_MSG) || (caps & FI_TAGGED)) {
 		if (caps & FI_RECV)
-			return 1;
+			return true;
 		if (caps & FI_SEND)
-			return 0;
-		return 1;
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
-int ofi_rma_initiate_allowed(uint64_t caps)
+bool ofi_rma_initiate_allowed(uint64_t caps)
 {
-	if (caps & FI_RMA ||
-		caps & FI_ATOMICS) {
-		if (caps & FI_WRITE ||
-			caps & FI_READ)
-			return 1;
-		if (caps & FI_REMOTE_WRITE ||
-			caps & FI_REMOTE_READ)
-			return 0;
-		return 1;
+	if ((caps & FI_RMA) || (caps & FI_ATOMICS)) {
+		if ((caps & FI_WRITE) || (caps & FI_READ))
+			return true;
+		if ((caps & FI_REMOTE_WRITE) || (caps & FI_REMOTE_READ))
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
-int ofi_rma_target_allowed(uint64_t caps)
+bool ofi_rma_target_allowed(uint64_t caps)
 {
-	if (caps & FI_RMA ||
-		caps & FI_ATOMICS) {
-		if (caps & FI_REMOTE_WRITE ||
-			caps & FI_REMOTE_READ)
-			return 1;
-		if (caps & FI_WRITE ||
-			caps & FI_READ)
-			return 0;
-		return 1;
+	if ((caps & FI_RMA) || (caps & FI_ATOMICS)) {
+		if ((caps & FI_REMOTE_WRITE) || (caps & FI_REMOTE_READ))
+			return true;
+		if ((caps & FI_WRITE) || (caps & FI_READ))
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
+}
+
+bool ofi_needs_tx(uint64_t caps)
+{
+	return ofi_send_allowed(caps) || ofi_rma_initiate_allowed(caps);
+}
+
+bool ofi_needs_rx(uint64_t caps)
+{
+	return ofi_recv_allowed(caps);
 }
 
 int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid, uint64_t flags)
@@ -400,14 +402,14 @@ sa_sin6:
 
 uint32_t ofi_addr_format(const char *str)
 {
-	char fmt[16];
+	char fmt[17];
 	int ret;
 
+	memset(fmt, 0, sizeof(fmt));
 	ret = sscanf(str, "%16[^:]://", fmt);
 	if (ret != 1)
 		return FI_FORMAT_UNSPEC;
 
-	fmt[sizeof(fmt) - 1] = '\0';
 	if (!strcasecmp(fmt, "fi_sockaddr_in"))
 		return FI_SOCKADDR_IN;
 	else if (!strcasecmp(fmt, "fi_sockaddr_in6"))
@@ -897,8 +899,8 @@ static int ofi_is_any_addr_port(struct sockaddr *addr)
 	}
 }
 
-int ofi_is_wildcard_listen_addr(const char *node, const char *service,
-				uint64_t flags, const struct fi_info *hints)
+bool ofi_is_wildcard_listen_addr(const char *node, const char *service,
+				 uint64_t flags, const struct fi_info *hints)
 {
 	struct addrinfo *res = NULL;
 	int ret;
@@ -907,30 +909,30 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 	    hints->addr_format != FI_SOCKADDR &&
 	    hints->addr_format != FI_SOCKADDR_IN &&
 	    hints->addr_format != FI_SOCKADDR_IN6)
-		return 0;
+		return false;
 
 	/* else it's okay to call getaddrinfo, proceed with processing */
 
 	if (node) {
 		if (!(flags & FI_SOURCE))
-			return 0;
+			return false;
 		ret = getaddrinfo(node, service, NULL, &res);
 		if (ret) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 				"getaddrinfo failed!\n");
-			return 0;
+			return false;
 		}
 		if (ofi_is_any_addr_port(res->ai_addr)) {
 			freeaddrinfo(res);
 			goto out;
 		}
 		freeaddrinfo(res);
-		return 0;
+		return false;
 	}
 
 	if (hints) {
 		if (hints->dest_addr)
-			return 0;
+			return false;
 
 		if (!hints->src_addr)
 			goto out;
@@ -938,7 +940,7 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 		return ofi_is_any_addr_port(hints->src_addr);
 	}
 out:
-	return ((flags & FI_SOURCE) && service) ? 1 : 0;
+	return ((flags & FI_SOURCE) && service);
 }
 
 size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
@@ -1100,13 +1102,14 @@ static void ofi_pollfds_cleanup(struct ofi_pollfds *pfds)
 
 	for (i = 0; i < pfds->nfds; i++) {
 		while (pfds->fds[i].fd == INVALID_SOCKET) {
-			pfds->fds[i].fd = pfds->fds[pfds->nfds-1].fd;
-			pfds->fds[i].events = pfds->fds[pfds->nfds-1].events;
-			pfds->fds[i].revents = pfds->fds[pfds->nfds-1].revents;
-			pfds->context[i] = pfds->context[pfds->nfds-1];
 			pfds->nfds--;
 			if (i == pfds->nfds)
 				break;
+
+			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
+			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
+			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
+			pfds->context[i] = pfds->context[pfds->nfds];
 		}
 	}
 }
@@ -1185,20 +1188,13 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
 		fastlock_release(&pfds->lock);
 
 		/* Index 0 is the internal signaling fd, skip it */
-		for (i = pfds->index; i < pfds->nfds && found < max_contexts; i++) {
-			if (pfds->fds[i].revents && i) {
+		for (i = 1; i < pfds->nfds && found < max_contexts; i++) {
+			if (pfds->fds[i].revents) {
 				contexts[found++] = pfds->context[i];
-				pfds->index = i;
-			}
-		}
-		for (i = 0; i < pfds->index && found < max_contexts; i++) {
-			if (pfds->fds[i].revents && i) {
-				contexts[found++] = pfds->context[i];
-				pfds->index = i;
 			}
 		}
 
-		if (timeout > 0)
+		if (!found && timeout > 0)
 			timeout -= (int) (ofi_gettime_ms() - start);
 
 	} while (timeout > 0 && !found);

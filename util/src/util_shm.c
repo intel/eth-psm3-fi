@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2016-2021 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -68,31 +68,40 @@ static void smr_peer_addr_init(struct smr_addr *peer)
 void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 {
 	struct iovec local_iov, remote_iov;
+	int remote_pid;
 	int ret;
 
-	if (peer_smr->cma_cap != SMR_CMA_CAP_NA) {
-		smr->cma_cap = peer_smr->cma_cap;
+	if (smr != peer_smr && peer_smr->cma_cap_peer != SMR_CMA_CAP_NA) {
+		smr->cma_cap_peer = peer_smr->cma_cap_peer;
 		return;
 	}
-	local_iov.iov_base = &smr->cma_cap;
-	local_iov.iov_len = sizeof(smr->cma_cap);
+	remote_pid = peer_smr->pid;
+	local_iov.iov_base = &remote_pid;
+	local_iov.iov_len = sizeof(remote_pid);
 	remote_iov.iov_base = (char *)peer_smr->base_addr +
-			      ((char *)&peer_smr->cma_cap - (char *)peer_smr);
-	remote_iov.iov_len = sizeof(peer_smr->cma_cap);
+			      ((char *)&peer_smr->pid - (char *)peer_smr);
+	remote_iov.iov_len = sizeof(peer_smr->pid);
 	ret = ofi_process_vm_writev(peer_smr->pid, &local_iov, 1,
 				    &remote_iov, 1, 0);
-	smr->cma_cap = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
-	peer_smr->cma_cap = smr->cma_cap;
+	assert(remote_pid == peer_smr->pid);
+
+	if (smr == peer_smr) {
+		smr->cma_cap_self = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+	} else {
+		smr->cma_cap_peer = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+		peer_smr->cma_cap_peer = smr->cma_cap_peer;
+	}
 }
 
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 				  size_t *cmd_offset, size_t *resp_offset,
 				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset)
+				  size_t *peer_offset, size_t *name_offset,
+				  size_t *sock_offset)
 {
 	size_t cmd_queue_offset, resp_queue_offset, inject_pool_offset;
 	size_t sar_pool_offset, peer_data_offset, ep_name_offset;
-	size_t tx_size, rx_size, total_size;
+	size_t tx_size, rx_size, total_size, sock_name_offset;
 
 	tx_size = roundup_power_of_two(tx_count);
 	rx_size = roundup_power_of_two(rx_count);
@@ -108,6 +117,8 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 			   sizeof(struct smr_sar_pool_entry) * SMR_MAX_PEERS;
 	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) * SMR_MAX_PEERS;
 
+	sock_name_offset = ep_name_offset + SMR_NAME_MAX;
+
 	if (cmd_offset)
 		*cmd_offset = cmd_queue_offset;
 	if (resp_offset)
@@ -120,8 +131,10 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 		*peer_offset = peer_data_offset;
 	if (name_offset)
 		*name_offset = ep_name_offset;
+	if (sock_offset)
+		*sock_offset = sock_name_offset;
 
-	total_size = ep_name_offset + SMR_NAME_MAX;
+	total_size = sock_name_offset + SMR_SOCK_NAME_MAX;
 
 	/*
  	 * Revisit later to see if we really need the size adjustment, or
@@ -132,6 +145,44 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	return total_size;
 }
 
+static int smr_retry_map(const char *name, int *fd)
+{
+	char tmp[NAME_MAX];
+	struct smr_region *old_shm;
+	struct stat sts;
+	int shm_pid;
+
+	*fd = shm_open(name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	if (*fd < 0)
+		return -errno;
+
+	old_shm = mmap(NULL, sizeof(*old_shm), PROT_READ | PROT_WRITE,
+		       MAP_SHARED, *fd, 0);
+	if (old_shm == MAP_FAILED)
+		goto err;
+
+	if (old_shm->version > SMR_VERSION) {
+		munmap(old_shm, sizeof(*old_shm));
+		goto err;
+	}
+	shm_pid = old_shm->pid;
+	munmap(old_shm, sizeof(*old_shm));
+
+	if (!shm_pid)
+		return FI_SUCCESS;
+
+	memset(tmp, 0, sizeof(tmp));
+	snprintf(tmp, sizeof(tmp), "/proc/%d", shm_pid);
+
+	if (stat(tmp, &sts) == -1 && errno == ENOENT)
+		return FI_SUCCESS;
+
+err:
+	close(*fd);
+	shm_unlink(name);
+	return -FI_EBUSY;
+}
+
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region *volatile *smr)
@@ -139,7 +190,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	struct smr_ep_name *ep_name;
 	size_t total_size, cmd_queue_offset, peer_data_offset;
 	size_t resp_queue_offset, inject_pool_offset, name_offset;
-	size_t sar_pool_offset;
+	size_t sar_pool_offset, sock_name_offset;
 	int fd, ret, i;
 	void *mapped_addr;
 	size_t tx_size, rx_size;
@@ -149,12 +200,25 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	total_size = smr_calculate_size_offsets(tx_size, rx_size, &cmd_queue_offset,
 					&resp_queue_offset, &inject_pool_offset,
 					&sar_pool_offset, &peer_data_offset,
-					&name_offset);
+					&name_offset, &sock_name_offset);
 
-	fd = shm_open(attr->name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	fd = shm_open(attr->name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		FI_WARN(prov, FI_LOG_EP_CTRL, "shm_open error\n");
-		return -errno;
+		if (errno != EEXIST) {
+			FI_WARN(prov, FI_LOG_EP_CTRL,
+				"shm_open error (%s): %s\n",
+				attr->name, strerror(errno));
+			return -errno;
+		}
+
+		ret = smr_retry_map(attr->name, &fd);
+		if (ret) {
+			FI_WARN(prov, FI_LOG_EP_CTRL, "shm file in use (%s)\n",
+				attr->name);
+			return ret;
+		}
+		FI_WARN(prov, FI_LOG_EP_CTRL,
+			"Overwriting shm from dead process (%s)\n", attr->name);
 	}
 
 	ep_name = calloc(1, sizeof(*ep_name));
@@ -195,7 +259,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
 	(*smr)->flags = SMR_FLAG_ATOMIC | SMR_FLAG_DEBUG;
-	(*smr)->cma_cap = SMR_CMA_CAP_NA;
+	(*smr)->cma_cap_peer = SMR_CMA_CAP_NA;
+	(*smr)->cma_cap_self = SMR_CMA_CAP_NA;
 	(*smr)->base_addr = *smr;
 
 	(*smr)->total_size = total_size;
@@ -205,6 +270,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->sar_pool_offset = sar_pool_offset;
 	(*smr)->peer_data_offset = peer_data_offset;
 	(*smr)->name_offset = name_offset;
+	(*smr)->sock_name_offset = sock_name_offset;
 	(*smr)->cmd_cnt = rx_size;
 	/* Limit of 1 outstanding SAR message per peer */
 	(*smr)->sar_cnt = SMR_MAX_PEERS;
@@ -345,7 +411,8 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 
 	peer_smr = smr_peer_region(region, id);
 
-	if (region->cma_cap == SMR_CMA_CAP_NA && region != peer_smr)
+	if ((region != peer_smr && region->cma_cap_peer == SMR_CMA_CAP_NA) ||
+	    (region == peer_smr && region->cma_cap_self == SMR_CMA_CAP_NA))
 		smr_cma_check(region, peer_smr);
 }
 

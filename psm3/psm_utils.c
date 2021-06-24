@@ -59,7 +59,6 @@
 #include "psm_mq_internal.h"
 #include "ips_proto_params.h"
 #include <netinet/in.h>  // for sockaddr
-#include <infiniband/ib.h>  // for AF_IB structures
 #include <fnmatch.h>
 
 
@@ -449,15 +448,6 @@ const char *psmi_sockaddr_ntop(struct sockaddr* addr, char *dst, socklen_t size)
 		snprintf(dst+strlen(dst), size-strlen(dst), " %u", be16toh(in_addr->sin6_port));
 		return dst;
 	}
-	case AF_IB:
-	{
-		struct sockaddr_ib* ib_addr = ((struct sockaddr_ib*)addr);
-		// we show the GID sid and pkey.
-		// Could also output sid_mask and sib_scope_id
-		inet_ntop(AF_INET6, &ib_addr->sib_addr, dst, size);
-		snprintf(dst+strlen(dst), size-strlen(dst), " 0x%016"PRIx64" 0x%04"PRIx16, be64toh(ib_addr->sib_sid), be16toh(ib_addr->sib_pkey));
-		return dst;
-	}
 	default:
 		snprintf(dst, size, "Unsupported");
 		return dst;
@@ -497,8 +487,6 @@ socklen_t psmi_sockaddr_len(struct sockaddr* addr)
 		return (sizeof(struct sockaddr_in));
 	case AF_INET6:
 		return (sizeof(struct sockaddr_in6));
-	case AF_IB:
-		return (sizeof(struct sockaddr_ib));
 	default:
 		// unknown
 		return 0;	// be conservative
@@ -584,7 +572,7 @@ uintptr_t psmi_getpagesize(void)
  * if nothing provided or doesn't match current process, def is returned
  * if syntax error, def_syntax is returned
  */
-static int psmi_parse_val_pattern(const char *env, int def, int def_syntax)
+int psmi_parse_val_pattern(const char *env, int def, int def_syntax)
 {
 	int ret = def;
 
@@ -615,6 +603,7 @@ static int psmi_parse_val_pattern(const char *env, int def, int def_syntax)
 					))
 					ret = def;
 		}
+		psmi_free(e);
 	}
 done:
 	return ret;
@@ -925,6 +914,104 @@ int psmi_parse_memmode(void)
 	}
 }
 
+#ifdef PSM_CUDA
+// we need GPUDIRECT config early to influence rdmamode defaults,
+// MR Cache mode and whether we need to open RV.
+// These functions are later used to confirm and finalize config for
+// ips_proto_init
+
+// value returned is 0/1 (disable/enable)
+unsigned psmi_parse_gpudirect(void)
+{
+	union psmi_envvar_val envval;
+	static int have_value = 0;
+	static unsigned saved;
+
+	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
+	if (have_value)
+		return saved;
+
+	psmi_getenv("PSM3_GPUDIRECT",
+		"Use GPUDirect DMA and RDMA support to allow the NIC to directly read"
+		" from the GPU for send DMA and write to the GPU for recv RDMA."
+		" Also enable GPUDirect copy for more efficient CPU to/from GPU copies."
+		" Requires rv module support.(default is disabled i.e. 0)",
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
+		(union psmi_envvar_val)0, /* Disabled by default */
+		&envval);
+
+	saved = envval.e_uint;
+	have_value = 1;
+	return saved;
+}
+
+// value returned is limit >= 0, (0 disables GPUDIRECT Send RDMA)
+unsigned psmi_parse_gpudirect_send_limit(void)
+{
+	union psmi_envvar_val envval;
+	static int have_value = 0;
+	static unsigned saved;
+
+	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
+	if (have_value)
+		return saved;
+
+	/* Default Send threshold for Gpu-direct set to 30000 */
+	psmi_getenv("PSM3_GPUDIRECT_SEND_LIMIT",
+		    "GPUDirect feature on send side will be switched off for messages larger than limit.",
+		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+		    (union psmi_envvar_val)30000, &envval);
+
+	saved = envval.e_uint;
+	have_value = 1;
+	return saved;
+}
+
+// value returned is limit >= 0, (0 disables GPUDIRECT Recv RDMA)
+unsigned psmi_parse_gpudirect_recv_limit(void)
+{
+	union psmi_envvar_val envval;
+	static int have_value = 0;
+	static unsigned saved;
+
+	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
+	if (have_value)
+		return saved;
+
+	/* Default Send threshold for Gpu-direct set to 30000 */
+	psmi_getenv("PSM3_GPUDIRECT_RECV_LIMIT",
+		    "GPUDirect feature on receive side will be switched off for messages larger than limit.",
+		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+		    (union psmi_envvar_val)UINT_MAX, &envval);
+
+	saved = envval.e_uint;
+	have_value = 1;
+	return saved;
+}
+
+#endif	// PSM_CUDA
+
+/* Send DMA Enable */
+unsigned psmi_parse_senddma(void)
+{
+	union psmi_envvar_val envval;
+	static int have_value = 0;
+	static unsigned saved;
+
+	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
+	if (have_value)
+		return saved;
+
+	psmi_getenv("PSM3_SDMA",
+		"UD send dma flags (0 disables send dma, 1 enables), default 0",
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
+		(union psmi_envvar_val)0, &envval);
+	saved = envval.e_uint;
+	have_value = 1;
+	return saved;
+}
+
+
 /* RDMA mode */
 // we need this early when setting defaults for RV thresholds in psmi_mq_malloc
 // and also want this available when creating the verbs_ep since it may affect
@@ -934,23 +1021,64 @@ int psmi_parse_memmode(void)
 unsigned psmi_parse_rdmamode(void)
 {
 	union psmi_envvar_val env_rdma;
-	static unsigned saved_rdmamode = 0xffffffff;
+	static int have_value = 0;
+	static unsigned saved_rdmamode;
+	unsigned default_rdma;
+#ifdef PSM_CUDA
+#ifdef RNDV_MOD
+	int gpudirect = 0;
+#endif
+#endif
 
 	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
-	if (saved_rdmamode != 0xffffffff)
+	if (have_value)
 		return saved_rdmamode;
 
+	default_rdma = IPS_PROTOEXP_FLAGS_DEFAULT;
+
+#ifdef PSM_CUDA
+#ifdef RNDV_MOD
+	gpudirect = PSMI_IS_CUDA_ENABLED && psmi_parse_gpudirect();
+	// GPUDIRECT causes default of RDMA=1
+	if (gpudirect)
+		default_rdma = (default_rdma & ~IPS_PROTOEXP_FLAG_RDMA_MASK)
+				| IPS_PROTOEXP_FLAG_RDMA_KERNEL;
+#endif
+#endif
 	psmi_getenv("PSM3_RDMA",
 		    "RDMA proto control (0-no RDMA,"
+#ifdef RNDV_MOD
 			" 1-kernel RDMA,"
+#endif
 			" 2-user RDMA, 3-user RC send/RDMA) "
 			//" additional flags: 8-interleave, 0x10-serialize"
 			// IPS_PROTOEXP_FLAG_TID_DEBUG (0x4)      N/A
 			,
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-		    (union psmi_envvar_val)IPS_PROTOEXP_FLAGS_DEFAULT,
+		    (union psmi_envvar_val)default_rdma,
 		    &env_rdma);
+#ifdef PSM_CUDA
+#ifdef RNDV_MOD
+#if 1 // remove this code when RV is ready for RDMA=2, 3 w/GPU Direct
+	if (gpudirect && IPS_PROTOEXP_FLAG_USER_RC_QP(env_rdma.e_uint)) {
+		_HFI_INFO("WARNING: GPUDIRECT only allowed with PSM3_RDMA=0 or 1, using %u\n", default_rdma);
+		env_rdma.e_uint = default_rdma;
+	}
+#endif
+#endif
+#endif
+#ifndef RNDV_MOD
+	if (IPS_PROTOEXP_FLAG_KERNEL_QP(env_rdma.e_uint)) {
+		static int logged = 0;
+		if (! logged) {
+			_HFI_INFO("WARNING: PSM built without rv module enabled, RDMA mode %d unavailable\n", IPS_PROTOEXP_FLAG_RDMA_KERNEL);
+			logged = 1;
+		}
+		env_rdma.e_uint = 0;
+	}
+#endif
 	saved_rdmamode = env_rdma.e_uint;
+	have_value = 1;
 	return saved_rdmamode;
 }
 
@@ -959,10 +1087,11 @@ unsigned psmi_parse_rdmamode(void)
 int psmi_parse_identify(void)
 {
 	union psmi_envvar_val myenv;
-	static int saved_identify = -1;
+	static int have_value;
+	static int saved_identify;
 
 	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
-	if (saved_identify >= 0)
+	if (have_value)
 		return saved_identify;
 
 	psmi_getenv("PSM3_IDENTIFY", "Identify PSM version being run "
@@ -976,6 +1105,7 @@ int psmi_parse_identify(void)
 		    	PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
 		    	(union psmi_envvar_val)"0", &myenv);
 	saved_identify = psmi_parse_val_pattern(myenv.e_str, 0, 0);
+	have_value = 1;
 
 	return saved_identify;
 }
@@ -1079,7 +1209,7 @@ psmi_syslog(psm2_ep_t ep, int to_console, int level, const char *format, ...)
 		ep->did_syslog = 1;
 
 		memset(&uuid_str, 0, sizeof(uuid_str));
-		psmi_uuid_unparse(ep->uuid, uuid_str);
+		uuid_unparse(ep->uuid, uuid_str);
 		hfi_syslog("PSM", 0, LOG_WARNING,
 			   "uuid_key=%s,unit=%d"
 			   ,
@@ -1157,19 +1287,6 @@ void psmi_multi_ep_init()
 
 #ifdef PSM_FI
 
-struct psmi_faultinj_spec {
-	STAILQ_ENTRY(psmi_faultinj_spec) next;
-	char spec_name[PSMI_FAULTINJ_SPEC_NAMELEN];
-
-	uint64_t num_faults;
-	uint64_t num_calls;
-
-	struct drand48_data drand48_data;
-	int num;
-	int denom;
-	long int initial_seed;
-};
-
 int psmi_faultinj_enabled = 0;
 int psmi_faultinj_verbose = 0;
 char *psmi_faultinj_outfile = NULL;
@@ -1240,7 +1357,7 @@ static void psmi_faultinj_reregister_stats()
 	}
 
 	psmi_stats_reregister_type("Fault_Injection", PSMI_STATSTYPE_FAULTINJ,
-		entries, num_entries, 0, &psmi_faultinj_head);
+		entries, num_entries, 0, &psmi_faultinj_head, NULL);
 	psmi_free(entries);
 }
 
@@ -1386,10 +1503,6 @@ int psmi_faultinj_is_fault(struct psmi_faultinj_spec *fi)
 	lrand48_r(&fi->drand48_data, &rnum);
 	if (((int) (rnum % INT_MAX)) % fi->denom <= fi->num) {
 		fi->num_faults++;
-		if (psmi_faultinj_verbose) {
-			printf("%s: injecting fault: %s\n", hfi_get_mylabel(), fi->spec_name);
-			fflush(stdout);
-		}
 		return 1;
 	} else
 		return 0;
@@ -1446,10 +1559,12 @@ void psmi_mem_stats_register(void)
 				(uint64_t*)&psmi_stats_memory.m_unexpbufs_total),
 		PSMI_STATS_DECLU64("Unexp._Buffers_(max)",
 				(uint64_t*)&psmi_stats_memory.m_unexpbufs_max),
+#ifdef RNDV_MOD
 		PSMI_STATS_DECLU64("Peer_Rndv_(current)",
 				(uint64_t*)&psmi_stats_memory.m_peerrndv_total),
 		PSMI_STATS_DECLU64("Peer_Rndv_(max)",
 				(uint64_t*)&psmi_stats_memory.m_peerrndv_max),
+#endif
 		PSMI_STATS_DECLU64("statistics_(current)",
 				(uint64_t*)&psmi_stats_memory.m_stats_total),
 		PSMI_STATS_DECLU64("statistics_(max)",
@@ -1464,7 +1579,7 @@ void psmi_mem_stats_register(void)
 		psmi_stats_register_type("PSM_memory_allocation_statistics",
                     PSMI_STATSTYPE_MEMORY,
                     entries,
-                    PSMI_STATS_HOWMANY(entries), 0, &psmi_stats_memory);
+                    PSMI_STATS_HOWMANY(entries), 0, &psmi_stats_memory, NULL);
 	}
 }
 
@@ -1493,10 +1608,11 @@ void psmi_log_memstats(psmi_memtype_t type, int64_t nbytes)
 	case STATS:
 		_add_max_total(stats, nbytes);
 		break;
+#ifdef RNDV_MOD
 	case PEER_RNDV:
 		_add_max_total(peerrndv, nbytes);
 		break;
-
+#endif
 	case UNDEFINED:
 		_add_max_total(undefined, nbytes);
 		break;
@@ -1965,8 +2081,8 @@ void *psmi_memalign_internal(psm2_ep_t ep, psmi_memtype_t type,
 	}
 
 	if_pf(psmi_stats_mask & PSMI_STATSTYPE_MEMORY) {
-		void *rv = newa + preambleSize;
-		struct psmi_memtype_hdr *hdr = (struct psmi_memtype_hdr *)(rv-sizeof(struct psmi_memtype_hdr));
+		void *rv = (void *)((uint8_t *)newa + preambleSize);
+		struct psmi_memtype_hdr *hdr = (struct psmi_memtype_hdr *)((uint8_t *)rv - sizeof(struct psmi_memtype_hdr));
 		hdr->size = newsz;
 		hdr->type = type;
 		hdr->magic = 0x8c;

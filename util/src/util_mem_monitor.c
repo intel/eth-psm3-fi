@@ -36,6 +36,7 @@
 
 #include <ofi_mr.h>
 #include <unistd.h>
+#include "ofi_hmem.h"
 
 pthread_mutex_t mm_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_rwlock_t mm_list_rwlock = PTHREAD_RWLOCK_INITIALIZER;
@@ -208,6 +209,9 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++) {
 		cache->monitors[iface] = NULL;
 
+		if (!hmem_ops[iface].initialized)
+			continue;
+
 		monitor = monitors[iface];
 		if (!monitor) {
 			FI_DBG(&core_prov, FI_LOG_MR,
@@ -218,9 +222,7 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 
 		if (dlist_empty(&monitor->list)) {
 			ret = monitor->start(monitor);
-			if (ret == -FI_ENOSYS)
-				continue;
-			else if (ret)
+			if (ret)
 				goto err;
 		}
 
@@ -347,7 +349,15 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 #include <sys/ioctl.h>
 #include <linux/userfaultfd.h>
 
-
+/* The userfault fd monitor requires for events that could
+ * trigger it to be handled outside of the monitor functions
+ * itself. When a fault occurs on a monitored region, the
+ * faulting thread is put to sleep until the event is read
+ * via the userfault file descriptor. If this fault occurs
+ * within the userfault handling thread, no threads will
+ * read this event and our threads cannot progress, resulting
+ * in a hang.
+ */
 static void *ofi_uffd_handler(void *arg)
 {
 	struct uffd_msg msg;

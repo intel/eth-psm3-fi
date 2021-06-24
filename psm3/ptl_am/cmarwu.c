@@ -154,9 +154,9 @@ int64_t cma_get(pid_t pid, const void *src, void *dst, int64_t n)
 			return -1;
 		}
 		sum += nr;
-		local.iov_base += nr;
+		local.iov_base = (void *)((uint8_t *)local.iov_base + nr);
 		local.iov_len -= nr;
-		remote.iov_base += nr;
+		remote.iov_base = (void *)((uint8_t *)remote.iov_base + nr);
 		remote.iov_len -= nr;
 	}
 	return sum;
@@ -181,9 +181,9 @@ int64_t cma_put(const void *src, pid_t pid, void *dst, int64_t n)
 			return -1;
 		}
 		sum += nr;
-		local.iov_base += nr;
+		local.iov_base = (void *)((uint8_t *)local.iov_base + nr);
 		local.iov_len -= nr;
-		remote.iov_base += nr;
+		remote.iov_base = (void *)((uint8_t *)remote.iov_base + nr);
 		remote.iov_len -= nr;
 	}
 	return sum;

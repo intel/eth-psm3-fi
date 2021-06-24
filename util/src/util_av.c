@@ -247,16 +247,28 @@ void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr)
 	return entry->data;
 }
 
-int ofi_verify_av_insert(struct util_av *av, uint64_t flags)
+int ofi_verify_av_insert(struct util_av *av, uint64_t flags, void *context)
 {
-	if ((av->flags & FI_EVENT) && !av->eq) {
-		FI_WARN(av->prov, FI_LOG_AV, "no EQ bound to AV\n");
-		return -FI_ENOEQ;
+	if (av->flags & FI_EVENT) {
+		if (!av->eq) {
+			FI_WARN(av->prov, FI_LOG_AV, "no EQ bound to AV\n");
+			return -FI_ENOEQ;
+		}
+
+		if (flags & FI_SYNC_ERR) {
+			FI_WARN(av->prov, FI_LOG_AV, "invalid flag\n");
+			return -FI_EBADFLAGS;
+		}
 	}
 
-	if (flags & ~(FI_MORE)) {
+	if (flags & ~(FI_MORE | FI_SYNC_ERR)) {
 		FI_WARN(av->prov, FI_LOG_AV, "unsupported flags\n");
 		return -FI_EBADFLAGS;
+	}
+
+	if ((flags & FI_SYNC_ERR) && !context) {
+		FI_WARN(av->prov, FI_LOG_AV, "null context with FI_SYNC_ERR");
+		return -FI_EINVAL;
 	}
 
 	return 0;
@@ -411,6 +423,13 @@ int ofi_av_close(struct util_av *av)
 	return 0;
 }
 
+size_t ofi_av_size(struct util_av *av)
+{
+	return av->av_entry_pool->entry_cnt ?
+	       av->av_entry_pool->entry_cnt :
+	       av->av_entry_pool->attr.chunk_cnt;
+}
+
 static int util_verify_av_util_attr(struct util_domain *domain,
 				    const struct util_av_attr *util_attr)
 {
@@ -426,7 +445,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 			const struct util_av_attr *util_attr)
 {
 	int ret = 0;
-	size_t max_count;
+	size_t orig_size;
 	size_t offset;
 
 	/* offset calculated on a 8-byte boundary */
@@ -441,8 +460,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 		.max_cnt	= 0,
 		/* Don't use track of buffer, because user can close
 		 * the AV without prior deletion of addresses */
-		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_INDEXED |
-				  OFI_BUFPOOL_HUGEPAGES,
+		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_INDEXED,
 	};
 
 	/* TODO: Handle FI_READ */
@@ -452,16 +470,16 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	if (ret)
 		return ret;
 
-	max_count = attr->count ? attr->count : ofi_universe_size;
-	av->count = roundup_power_of_two(max_count);
-	FI_INFO(av->prov, FI_LOG_AV, "AV size %zu\n", av->count);
+	orig_size = attr->count ? attr->count : ofi_universe_size;
+	orig_size = roundup_power_of_two(orig_size);
+	FI_INFO(av->prov, FI_LOG_AV, "AV size %zu\n", orig_size);
 
 	av->addrlen = util_attr->addrlen;
 	av->context_offset = offset + av->addrlen;
 	av->flags = util_attr->flags | attr->flags;
 	av->hash = NULL;
 
-	pool_attr.chunk_cnt = av->count;
+	pool_attr.chunk_cnt = orig_size;
 	return ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
 }
 
@@ -575,28 +593,12 @@ fi_addr_t ofi_ip_av_get_fi_addr(struct util_av *av, const void *addr)
 	return ofi_av_lookup_fi_addr(av, addr);
 }
 
-static int ip_av_valid_addr(struct util_av *av, const void *addr)
-{
-	const struct sockaddr_in *sin = addr;
-	const struct sockaddr_in6 *sin6 = addr;
-
-	switch (sin->sin_family) {
-	case AF_INET:
-		return sin->sin_port && sin->sin_addr.s_addr;
-	case AF_INET6:
-		return sin6->sin6_port &&
-		      memcmp(&in6addr_any, &sin6->sin6_addr, sizeof(in6addr_any));
-	default:
-		return 0;
-	}
-}
-
 static int ip_av_insert_addr(struct util_av *av, const void *addr,
 			     fi_addr_t *fi_addr, void *context)
 {
 	int ret;
 
-	if (ip_av_valid_addr(av, addr)) {
+	if (ofi_valid_dest_ipaddr(addr)) {
 		fastlock_acquire(&av->lock);
 		ret = ofi_av_insert_addr(av, addr, fi_addr);
 		fastlock_release(&av->lock);
@@ -616,12 +618,19 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 }
 
 int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
-		      size_t count, fi_addr_t *fi_addr, void *context)
+		      size_t count, fi_addr_t *fi_addr, uint64_t flags,
+		      void *context)
 {
 	int ret, success_cnt = 0;
+	int *sync_err = NULL;
 	size_t i;
 
 	FI_DBG(av->prov, FI_LOG_AV, "inserting %zu addresses\n", count);
+	if (flags & FI_SYNC_ERR) {
+		sync_err = context;
+		memset(sync_err, 0, sizeof(*sync_err) * count);
+	}
+
 	for (i = 0; i < count; i++) {
 		ret = ip_av_insert_addr(av, (const char *) addr + i * addrlen,
 					fi_addr ? &fi_addr[i] : NULL, context);
@@ -629,6 +638,8 @@ int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
 			success_cnt++;
 		else if (av->eq)
 			ofi_av_write_event(av, i, -ret, context);
+		else if (sync_err)
+			sync_err[i] = -ret;
 	}
 
 	FI_DBG(av->prov, FI_LOG_AV, "%d addresses successful\n", success_cnt);
@@ -648,12 +659,12 @@ int ofi_ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	int ret;
 
 	av = container_of(av_fid, struct util_av, av_fid);
-	ret = ofi_verify_av_insert(av, flags);
+	ret = ofi_verify_av_insert(av, flags, context);
 	if (ret)
 		return ret;
 
 	return ofi_ip_av_insertv(av, addr, ofi_sizeofaddr(addr),
-				 count, fi_addr, context);
+				 count, fi_addr, flags, context);
 }
 
 static int ip_av_insertsvc(struct fid_av *av, const char *node,
@@ -844,7 +855,7 @@ static int ip_av_insertsym(struct fid_av *av_fid, const char *node,
 	int ret, count;
 
 	av = container_of(av_fid, struct util_av, av_fid);
-	ret = ofi_verify_av_insert(av, flags);
+	ret = ofi_verify_av_insert(av, flags, context);
 	if (ret)
 		return ret;
 
@@ -854,7 +865,7 @@ static int ip_av_insertsym(struct fid_av *av_fid, const char *node,
 		return count;
 
 	ret = ofi_ip_av_insertv(av, addr, addrlen, count,
-				fi_addr, context);
+				fi_addr, flags, context);
 	free(addr);
 	return ret;
 }

@@ -58,7 +58,9 @@
 #include "ips_proto.h"
 #include "psm_mq_internal.h"
 #include "ips_proto_internal.h"
+#ifdef RNDV_MOD
 #include "psm_rndv_mod.h"
+#endif
 
 /*
  * define connection version. this is the basic version, optimized
@@ -100,7 +102,7 @@ struct ips_connect_reqrep {
 	uint8_t reserved[6+16];	// 1st 6 bytes keep fields below 64b aligned
 	// fields below can be zero depending on rdmamode
 
-	// for rndv module connection establishment only set for RNDV_MOD_MR
+	// for rndv module connection establishment only set for RNDV_MOD
 	union ibv_gid gid; /* sender's gid */	// zero if no rndv mod RDMA
 	uint32_t rv_index; /* senders process index */ // zero if no rndv mod RDMA
 	uint32_t resv;	// alignment
@@ -188,6 +190,7 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 	ips_epaddr_t *ipsaddr, uint8_t opcode, void *payload,
 	size_t max_paylen);
 
+#ifdef RNDV_MOD
 /* on -1 errno is status
  * EIO is connection error other values are more serious (invalid call, etc)
  */
@@ -209,6 +212,9 @@ static int is_rv_connected(ips_epaddr_t *ipsaddr)
 	ipsaddr->rv_connected = (1 == ret);
 	return ret;
 }
+#else // RNDV_MOD
+static inline int is_rv_connected(ips_epaddr_t *ipsaddr) { return 1; }
+#endif // RNDV_MOD
 	
 /**
  * Configure flows for an ipsaddr.
@@ -351,6 +357,7 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	if (err)
 		return err;
 
+#ifdef RNDV_MOD
 	ipsaddr->remote_gid = req->gid;
 	ipsaddr->remote_rv_index = req->rv_index;
 	if (ipsaddr->rv_conn) {
@@ -384,10 +391,13 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	//	_HFI_ERROR("mismatched PSM3_RDMA config, remote end in mode 1\n");
 	//	return PSM2_INTERNAL_ERR;
 	}
+#endif // RNDV_MOD
 	if (ipsaddr->rc_qp) {
 		psmi_assert(IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode));
+#ifdef RNDV_MOD
 		psmi_assert(proto->ep->verbs_ep.rv
 					|| proto->ep->mr_cache_mode != MR_CACHE_MODE_KERNEL);
+#endif
 		if (! req->qp_attr.qpn) {
 			_HFI_ERROR("mismatched PSM3_RDMA config, remote end not in mode 2 or 3\n");
 			return PSM2_INTERNAL_ERR;
@@ -617,12 +627,14 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 		req->rdmamode = proto->ep->rdmamode & IPS_PROTOEXP_FLAG_RDMA_MASK;
 		req->static_rate = proto->epinfo.ep_link_rate;
 		memset(&req->reserved, 0, sizeof(req->reserved));
+#ifdef RNDV_MOD
 		// only supply gid if we want to use kernel rv
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode)
 				&& proto->ep->verbs_ep.rv) {
 			req->gid = proto->ep->verbs_ep.lgid;
 			req->rv_index = proto->ep->verbs_ep.rv_index;
 		} else
+#endif
 		{
 			memset(&req->gid, 0, sizeof(req->gid));
 			req->rv_index = 0;
@@ -697,11 +709,8 @@ MOCKABLE(ips_flow_init)(struct ips_flow *flow, struct ips_proto *proto,
 	psmi_assert_always(flow_index < EP_FLOW_LAST);
 
 	SLIST_NEXT(flow, next) = NULL;
-	if (transfer_type == PSM_TRANSFER_PIO) {
-		flow->flush = ips_proto_flow_flush_pio;
-	} else {
-		flow->flush = ips_proto_flow_flush_dma;
-	}
+	psmi_assert(transfer_type == PSM_TRANSFER_PIO);
+	flow->flush = ips_proto_flow_flush_pio;
 
 	flow->path =
 	    ips_select_path(proto, path_type, ipsaddr, ipsaddr->pathgrp);
@@ -715,7 +724,7 @@ MOCKABLE(ips_flow_init)(struct ips_flow *flow, struct ips_proto *proto,
 
 	/* min of local MTU and path MTU */
 	flow->frag_size = min(proto->epinfo.ep_mtu, flow->path->pr_mtu);
-	_HFI_VDBG("[ipsaddr=%p] UD flow->frag_size: %u = min("
+	_HFI_CONNDBG("[ipsaddr=%p] UD flow->frag_size: %u = min("
 		"proto->epinfo.ep_mtu(%u), flow->path->pr_mtu(%u))\n",
 		ipsaddr, flow->frag_size, proto->epinfo.ep_mtu,
 		flow->path->pr_mtu);
@@ -767,7 +776,6 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 	 */
 	if (master) {
 		struct ips_msgctl *msgctl;
-		_HFI_VDBG("ips_alloc_epaddr for EPID= 0x%"PRIx64"\n", epid);
 
 		/* Although an ips_msgtl is allocated here, it can be safely casted to
 		   both an ips_epaddr and a psm2_epaddr.  It is eventually freed as an
@@ -784,6 +792,8 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 		ipsaddr = &msgctl->master_epaddr;
 		epaddr = (psm2_epaddr_t) ipsaddr;
 
+		_HFI_CONNDBG("ips_alloc_epaddr %p for EPID= 0x%"PRIx64" %s\n",
+				epaddr, epid, hostname?hostname:"unknown");
 		ipsaddr->msgctl = msgctl;
 
 		/* initialize items in ips_msgctl_t */
@@ -820,7 +830,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 	/* Get path record for <service, slid, dlid> tuple */
 	lid = PSMI_EPID_GET_LID(epid);
 	ip_hi = PSMI_EPID_GET_LID(epid) >> 16;
-	_HFI_UDDBG("qpn=0x%x lid=0x%x ip_hi=0x%x\n", ipsaddr->remote_qpn, lid, ip_hi);
+	_HFI_CONNDBG("qpn=0x%x lid=0x%x ip_hi=0x%x\n", ipsaddr->remote_qpn, lid, ip_hi);
 
 	err = proto->ibta.get_path_rec(proto, proto->epinfo.ep_base_lid,
 				       __cpu_to_be16(lid),
@@ -847,9 +857,11 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 		ipsaddr->hpp_index = 0;
 
 	if (IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode)
+#ifdef RNDV_MOD
 		// if verbs_ep allows us to open w/o rv_open then we can't use RC QP
 		&& (proto->ep->verbs_ep.rv
 			|| proto->ep->mr_cache_mode != MR_CACHE_MODE_KERNEL)
+#endif
 		) {
 		struct ibv_qp_cap qp_cap;
 		ipsaddr->rc_qp = rc_qp_create(proto->ep, ipsaddr, &qp_cap);
@@ -880,6 +892,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 	ipsaddr->use_qp =  proto->ep->verbs_ep.qp;
 	ipsaddr->use_max_inline_data = proto->ep->verbs_ep.qp_cap.max_inline_data;
 
+#ifdef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode)
 			&& proto->ep->verbs_ep.rv) {
 		struct ibv_ah_attr ah_attr;
@@ -916,6 +929,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 			}
 		}
 	}
+#endif // RNDV_MOD
 
 	/*
 	 * Set up the flows on this ipsaddr
@@ -949,8 +963,10 @@ void ips_free_epaddr(psm2_epaddr_t epaddr, struct ips_proto *proto)
 	ips_epaddr_t *ipsaddr = (ips_epaddr_t *) epaddr;
 	ips_flow_fini(ipsaddr, proto);
 
-	_HFI_VDBG("epaddr=%p,ipsaddr=%p,connidx_incoming=%d\n", epaddr, ipsaddr,
-		  ipsaddr->connidx_incoming);
+	_HFI_CONNDBG("epaddr=%p connidx_incoming=%d epid=0x%"PRIx64"\n",
+			epaddr, ipsaddr->connidx_incoming, epaddr->epid);
+	IPS_MCTXT_REMOVE(ipsaddr);
+#ifdef RNDV_MOD
 	_HFI_MMDBG("free_epaddr\n");
 	if (ipsaddr->rv_conn) {
 		//__psm2_rv_destroy_conn(ipsaddr->rv_conn);
@@ -965,6 +981,7 @@ void ips_free_epaddr(psm2_epaddr_t epaddr, struct ips_proto *proto)
 		// maybe just call rndv_mod to set context to 0?  But could
 		// be races for callbacks and events already queued
 	}
+#endif // RNDV_MOD
 	if (ipsaddr->rc_qp) {
 		rc_qp_destroy(ipsaddr->rc_qp);
 		ipsaddr->rc_qp = NULL;
@@ -1020,7 +1037,7 @@ ips_proto_process_connect(struct ips_proto *proto, uint8_t opcode,
 				     hdr->epid, psmi_epaddr_fmt_addr(hdr->epid));
 			} else if (ipsaddr->cstate_outgoing != CSTATE_OUTGOING_WAITING) {
 				/* possible dupe */
-				_HFI_VDBG("connect dupe, expected %d got %d\n",
+				_HFI_CONNDBG("connect dupe, expected %d got %d\n",
 					  CSTATE_OUTGOING_WAITING,
 					  ipsaddr->cstate_outgoing);
 			} else {
@@ -1065,7 +1082,7 @@ ips_proto_process_connect(struct ips_proto *proto, uint8_t opcode,
 			int epaddr_do_free = 0;
 			psmi_assert_always(paylen ==
 					   sizeof(struct ips_connect_hdr));
-			_HFI_VDBG("Got a disconnect from %s\n",
+			_HFI_CONNDBG("Got a disconnect from %s\n",
 				  psmi_epaddr_get_name(hdr->epid));
 			proto->num_disconnect_requests++;
 			proto->epaddr_stats.disconnect_req_recv++;
@@ -1111,7 +1128,7 @@ ips_proto_process_connect(struct ips_proto *proto, uint8_t opcode,
 					      PSM_PROTOCOL_GO_BACK_N,
 					      IPS_PATH_LOW_PRIORITY,
 					      EP_FLOW_GO_BACK_N_PIO);
-				_HFI_VDBG
+				_HFI_CONNDBG
 				    ("Disconnect on unknown epaddr, just echo request\n");
 			} else if (ipsaddr->cstate_incoming != CSTATE_NONE) {
 				ipsaddr->cstate_incoming = CSTATE_NONE;
@@ -1184,10 +1201,10 @@ ptl_handle_connect_req(struct ips_proto *proto, psm2_epaddr_t epaddr,
 	if (req->epid == proto->ep->epid) {
 		psmi_handle_error(PSMI_EP_NORETURN, PSM2_EPID_NETWORK_ERROR,
 				  "Network connectivity problem: Locally detected duplicate "
-				  "LIDs 0x%04x on hosts %s and %s. (Exiting)",
+				  "LIDs 0x%04x on hosts %s and %s (%s port %u). (Exiting)",
 				  (uint32_t) psm2_epid_nid(req->epid),
 				  psmi_epaddr_get_hostname(req->epid),
-				  psmi_gethostname());
+				  psmi_gethostname(), proto->ep->dev_name, proto->ep->portnum);
 		/* XXX no return */
 		abort();
 	} else if (epaddr == NULL) {	/* new ep connect before we call into connect */
@@ -1332,7 +1349,7 @@ ips_proto_connect(struct ips_proto *proto, int numep,
 
 	/* First pass: make sure array of errors is at least fully defined */
 	for (i = 0; i < numep; i++) {
-		_HFI_VDBG("epid-connect=%s connect to epid 0x%"PRIx64": %s\n",
+		_HFI_CONNDBG("epid-connect=%s connect to epid 0x%"PRIx64": %s\n",
 			  array_of_epid_mask[i] ? "YES" : " NO",
 			  array_of_epid[i],
 			  psmi_epaddr_fmt_addr(array_of_epid[i]));
@@ -1363,14 +1380,16 @@ ips_proto_connect(struct ips_proto *proto, int numep,
 			char buf2[INET_ADDRSTRLEN];
 			if (PSMI_EPID_VERSION == PSMI_EPID_V3)
 					psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-					  " Trying to connect to a node (subnet id - %"PRIx64") on a"
+					  " Trying to connect from %s port %u to a node (subnet id - %"PRIx64") on a"
 					  " different subnet - %"PRIx64"\n",
+					  proto->ep->dev_name, proto->ep->portnum,
 					  PSMI_GET_SUBNET_ID(proto->ep->gid_hi),
 					  (uint64_t)PSMI_EPID_GET_SUBNET_ID(array_of_epid[i]));
 			else // V4
 					psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-					  " Trying to connect to a node (subnet %s) on a"
+					  " Trying to connect from %s to a node (subnet %s) on a"
 					  " different subnet %s\n",
+					  proto->ep->dev_name,
 					  psmi_ipv4_ntop((uint32_t)PSMI_GET_SUBNET_ID(proto->ep->gid_hi), buf1, sizeof(buf1)),
 					  psmi_ipv4_ntop((uint32_t)PSMI_EPID_GET_SUBNET_ID(array_of_epid[i]), buf2, sizeof(buf2)));
 		}
@@ -1384,8 +1403,8 @@ ips_proto_connect(struct ips_proto *proto, int numep,
 						  NULL,
 						  (timeout_in / 1000000UL), &err);
 			if (epaddr == NULL) {
-				_HFI_ERROR("Unable to issue connect to %s: %s\n",
-						psmi_epaddr_get_name(array_of_epid[i]),
+				_HFI_ERROR("Unable to issue connect from %s to %s: %s\n",
+						proto->ep->dev_name, psmi_epaddr_get_name(array_of_epid[i]),
 						psm2_error_get_string(err));
 				goto fail;
 			}
@@ -1730,7 +1749,10 @@ ips_proto_disconnect(struct ips_proto *proto, int force, int numep,
 			psmi_assert_always(ipsaddr->cstate_outgoing ==
 					   CSTATE_ESTABLISHED);
 		}
-		_HFI_VDBG("disconnecting %p\n", array_of_epaddr[i]);
+		_HFI_CONNDBG("disconnecting %p force=%d EPID= 0x%"PRIx64" %s\n",
+				ipsaddr, force, ((psm2_epaddr_t)ipsaddr)->epid,
+
+				psmi_epaddr_get_hostname(((psm2_epaddr_t)ipsaddr)->epid));
 		array_of_errors[i] = PSM2_EPID_UNKNOWN;
 		numep_todisc++;
 	}
@@ -1850,7 +1872,7 @@ ips_proto_disconnect(struct ips_proto *proto, int force, int numep,
 					continue;
 				if (array_of_errors[i] == PSM2_EPID_UNKNOWN) {
 					array_of_errors[i] = PSM2_TIMEOUT;
-					_HFI_VDBG
+					_HFI_CONNDBG
 					    ("disc timeout on index %d, epaddr %s\n",
 					     i,
 					     psmi_epaddr_get_name
@@ -1888,7 +1910,7 @@ ips_proto_disconnect(struct ips_proto *proto, int force, int numep,
 			ipsaddr->cstate_outgoing = CSTATE_OUTGOING_DISCONNECTED;
 			array_of_errors[i] = PSM2_OK;
 		}
-		_HFI_VDBG("non-graceful close complete from %d peers\n", numep);
+		_HFI_CONNDBG("non-graceful close complete from %d peers\n", numep);
 	}
 
 	for (i = 0; i < numep; i++) {

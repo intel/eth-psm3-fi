@@ -6,7 +6,7 @@ dnl
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libpsm3-fi], [1.11.2], [ofiwg@lists.openfabrics.org])
+AC_INIT([libpsm3-fi], m4_normalize(m4_esyscmd([sed 's/_/./g' VERSION])))
 AC_CONFIG_SRCDIR([src/psmx3.h])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -14,6 +14,7 @@ AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-pax])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([no])])
 dnl --- m4_include(config/fi_check_package.m4)
+m4_include(config/fi_strip_optflags.m4)
 AC_DEFINE([HAVE_PSM3], [1], [Build libfabric PSM3 provider])
 AC_DEFINE([HAVE_PSM3_DL], [1], [Build libfabric PSM3 provider])
 
@@ -24,7 +25,7 @@ AS_IF([test ! -z "$CC" && test "x$CC" == "xicc"],
 	CFLAGS="-Werror -xATOM_SSE4.2 -DPSM_AVX512 -fpic -fPIC -D_GNU_SOURCE -DPACK_STRUCT_STL=packed,"
 	LDFLAGS="-Wc,-static-intel"
       ], [ dnl GCC/other
-	CFLAGS="-Werror -mavx2 -fpic -fPIC -funwind-tables -Wno-strict-aliasing -Wformat -Wformat-security"
+	CFLAGS="-Werror -mavx2 -fpic -fPIC -funwind-tables -Wformat -Wformat-security"
       ])
 
 AC_ARG_ENABLE([psm-src],
@@ -49,20 +50,67 @@ AC_ARG_ENABLE([psm-rc],
 			      [Enable Verbs RC support (requires UD support) @<:@default=yes@:>@])],
 	      [],
 	      [enable_psm_rc=yes])
-AC_ARG_ENABLE([psm-rndv-mod],
-	      [AS_HELP_STRING([--enable-psm-rndv-mod],
-			      [Enable RNDV module use (requires UD support) @<:@default=no@:>@])],
-	      [],
-	      [enable_psm_rndv_mod=yes])
-AC_ARG_WITH([drvr-headers],
-	    [AC_HELP_STRING([--with-drvr-headers=DIR],
-			    [Provide path to where the driver headers are installed. @<:@default=/usr/include/uapi@:>@])],
-	    [], [with_drvr_headers="/usr/include/uapi"])
-if test "$with_drvr_headers" != "" && test "$with_drvr_headers" != "no"; then
-	CPPFLAGS="$CPPFLAGS -I$with_drvr_headers"
-	AC_CHECK_HEADER(rv/rv_user_ioctls.h, [],
-		AC_MSG_ERROR([RV Driver Headers requested but <rv/rv_user_ioctls.h> not found.]))
-fi
+AC_ARG_WITH([psm3-rv],
+            [AS_HELP_STRING([--with-psm3-rv],
+                            [Enable RV module use @<:@default=check@:>@])])
+AS_IF([test x$with_psm3_rv = xno],
+      [CPPFLAGS="$CPPFLAGS -URNDV_MOD"],
+      [
+	AS_IF([test "x$with_psm3_rv" = "x"],
+	      [
+		psm3_rv_check=1
+		with_psm3_rv=/usr/include
+	      ],[psm3_rv_check=0])
+	psm3_rv_old_header=0
+	save_CPPFLAGS=$CPPFLAGS
+	CPPFLAGS="$CPPFLAGS -I$with_psm3_rv"
+	dnl Check for /usr/include/rdma/rv_user_ioctls.h first
+	_FI_CHECK_PACKAGE_HEADER([psm3_rv],
+	                         [rdma/rv_user_ioctls.h],
+	                         [],
+	                         [psm3_rv_happy=1],
+	                         [psm3_rv_happy=0])
+
+	AS_IF([test $psm3_rv_happy -eq 0], [
+		AS_IF([test "$psm3_rv_check" -eq 1],
+		      [with_psm3_rv=/usr/include/uapi])
+		CPPFLAGS="$save_CPPFLAGS -I$with_psm3_rv"
+		_FI_CHECK_PACKAGE_HEADER([psm3_rv],
+		                         [rv/rv_user_ioctls.h],
+		                         [],
+		                         [psm3_rv_happy=1
+		                          psm3_rv_old_header=1],
+		                         [psm3_rv_happy=0])
+	      ])
+	CPPFLAGS=$save_CPPFLAGS
+	AS_IF([test "$psm3_rv_happy" -eq 0],
+	      [
+		AS_IF([test "$psm3_rv_check" -eq 0], [
+			psm3_happy=0
+			AC_MSG_ERROR([RV Module headers requested but rv_user_ioctls.h not found.])
+		])
+		CPPFLAGS="$CPPFLAGS -URNDV_MOD"
+	      ],[
+		CPPFLAGS="$CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"
+		AS_IF([test "$psm3_rv_old_header" -eq 1],
+		      [CPPFLAGS="$CPPFLAGS -DHAVE_OLD_RV_HEADER"])
+	      ])
+	AS_IF([test "$psm3_rv_happy" -eq 1 ], [
+		AC_MSG_CHECKING([for RV support for ring.overflow_cnt])
+		AC_COMPILE_IFELSE(
+			[AC_LANG_PROGRAM(
+				[[#include <sys/types.h>
+				  #include <stdint.h>
+				  #include <rdma/rv_user_ioctls.h>
+				]],[[struct rv_ring_header ring; ring.overflow_cnt=0;]])
+			],[
+				AC_MSG_RESULT(yes)
+			],[
+				AC_MSG_RESULT(no)
+				CPPFLAGS="$CPPFLAGS -DHAVE_NO_PSM3_RV_OVERFLOW_CNT"
+			])
+	      ])
+      ])
 AC_ARG_WITH([psm-headers],
 	    [AC_HELP_STRING([--with-psm-headers=DIR],
 			    [Provide path to where the psm headers are installed for split build. @<:@default=no@:>@])],
@@ -89,15 +137,13 @@ AS_IF([test "x$enable_psm_src" == "xyes" && test "x$enable_psm_ud" == "xyes"],
 	      [
 	          CPPFLAGS="$CPPFLAGS -UUSE_RC"
 	      ])
-	AS_IF([test "x$enable_psm_rndv_mod" == "xyes"],
-	      [CPPFLAGS="$CPPFLAGS -DRNDV_MOD_MR"],
-	      [CPPFLAGS="$CPPFLAGS -URNDV_MOD_MR"])
       ])
 AS_IF([test "x$enable_psm_src" == "xyes"],
       [
 	AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([unable to find shm_open() in librt])])
 	AC_SEARCH_LIBS([dlopen], [dl], [], [AC_MSG_ERROR([unable to find dlopen() in libdl])])
 	AC_SEARCH_LIBS([numa_node_of_cpu], [numa], [], [AC_MSG_ERROR([unable to find numa_node_of_cpu() in libnuma])])
+	AC_SEARCH_LIBS([uuid_parse], [uuid], [], [AC_MSG_ERROR([unable to find uuid_parse() in libuuid])])
 	AS_IF([test "x$enable_psm_ud" == "xyes"],
 	      [AC_SEARCH_LIBS([ibv_get_device_list], [ibverbs], [],
 			      [AC_MSG_ERROR([unable to find ibv_get_device_list() in libibverbs])])
@@ -127,28 +173,13 @@ AS_IF([test "x$enable_psm_src" == "xyes"],
 	AS_IF([test ! -z "$PSM_PERF"], [CPPFLAGS="$CPPFLAGS -DRDPMC_PERF_FRAMEWORK"], [])
 	AS_IF([test ! -z "$PSM_HEAP_DEBUG"], [CPPFLAGS="$CPPFLAGS -DPSM_HEAP_DEBUG"], [])
 	AS_IF([test ! -z "$PSM_PROFILE"], [CPPFLAGS="$CPPFLAGS -DPSM_PROFILE"], [])
-	AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
-	AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
       ])
 
 AM_CONDITIONAL([HAVE_PSM3_ADDITIONAL_GLOBALS], [test ! -z "$PSM2_ADDITIONAL_GLOBALS"], [])
 AM_COND_IF([HAVE_PSM3_ADDITIONAL_GLOBALS], [PSM3_ADDITIONAL_GLOBALS="$PSM2_ADDITIONAL_GLOBALS"],[])
 
-have_psm3_am_register_handlers_2=1
-have_psm3_mq_fp_msg=1
-have_psm3_mq_req_user=1
 
 psm3_happy=1
-
-AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
-		   $have_psm3_am_register_handlers_2,
-		   [psm3_am_register_handlers_2 function is present])
-AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_FP_MSG],
-		   $have_psm3_mq_fp_msg,
-		   [psm3_mq_fp_msg function is present and enabled])
-AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_REQ_USER],
-		   $have_psm3_mq_req_user,
-		   [psm3_mq_ipeek_dequeue_multi function is present and enabled])
 
 AC_CANONICAL_HOST
 
@@ -625,11 +656,14 @@ AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtim
 if test $have_libcuda -eq 1; then
 	cuda_CPPFLAGS="$cuda_CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT"
 fi
+AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
 
 CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
 LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
 LIBS="$LIBS $cuda_LIBS"
 
+AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
+AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
 dnl Provider-specific checks
 dnl FI_PROVIDER_INIT
 dnl FI_PROVIDER_SETUP([psm3])
@@ -642,11 +676,31 @@ AC_SUBST(PSM_HAL_INST)
 
 AM_COND_IF([HAVE_PSM3_SRC],
 	   [
-		IFS_VERSION="${RELEASE_TAG}"
+		IFS_VERSION="${RELEASE_TAG:-$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
+			|| git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
+		IFS_VERSION=${IFS_VERSION//./_}
 		GIT_HASH="$(git log --oneline --format='%H' -1)"
+		RPM_RELEASE=$(cut -d'_' -f5 <<<"${IFS_VERSION}")
+		RELEASE_VER=$(cut -d'_' -f1-4 <<<"${IFS_VERSION}" | sed 's/_/./g')
+		AS_IF([test x"${RELEASE_VER}" = x"${PACKAGE_VERSION}"], [], [
+			AC_MSG_NOTICE([Release Tag does not match VERSION file])
+			AC_MSG_NOTICE([${RELEASE_VER} != ${PACKAGE_VERSION}])
+			RPM_RELEASE=999
+		])
+		PSM3_PROV_VER_MAJOR=$(cut -d'.' -f1 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_MINOR=$(cut -d'.' -f2 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_MAINT=$(cut -d'.' -f3 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_PATCH=$(cut -d'.' -f4 <<<"${PACKAGE_VERSION}")
 	   ])
+AS_IF([test $have_libcuda -eq 1], [RPM_RELEASE=${RPM_RELEASE}cuda])
+
 AC_SUBST(IFS_VERSION)
 AC_SUBST(GIT_HASH)
+AC_SUBST(RPM_RELEASE)
+AC_SUBST(PSM3_PROV_VER_MAJOR)
+AC_SUBST(PSM3_PROV_VER_MINOR)
+AC_SUBST(PSM3_PROV_VER_MAINT)
+AC_SUBST(PSM3_PROV_VER_PATCH)
 dnl Set during Make.
 dnl AC_SUBST(BUILD_TIMESTAMP)
 dnl AC_SUBST(SRC_CHECKSUM)

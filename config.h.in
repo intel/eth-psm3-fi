@@ -79,15 +79,6 @@
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
 
-/* psm3_am_register_handlers_2 function is present */
-#undef HAVE_PSM2_AM_REGISTER_HANDLERS_2
-
-/* psm3_mq_fp_msg function is present and enabled */
-#undef HAVE_PSM2_MQ_FP_MSG
-
-/* psm3_mq_ipeek_dequeue_multi function is present and enabled */
-#undef HAVE_PSM2_MQ_REQ_USER
-
 /* Build libfabric PSM3 provider */
 #undef HAVE_PSM3
 
@@ -96,6 +87,12 @@
 
 /* PSM3 source is built-in */
 #undef HAVE_PSM3_SRC
+
+/* Define to 1 if you have the <rdma/rv_user_ioctls.h> header file. */
+#undef HAVE_RDMA_RV_USER_IOCTLS_H
+
+/* Define to 1 if you have the <rv/rv_user_ioctls.h> header file. */
+#undef HAVE_RV_RV_USER_IOCTLS_H
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -156,6 +153,9 @@
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
+
+/* Whether we have CUDA runtime or not */
+#undef PSM3_CUDA
 
 /* Define to 1 if pthread_spin_init is available. */
 #undef PT_LOCK_SPIN

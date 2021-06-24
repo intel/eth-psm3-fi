@@ -62,7 +62,9 @@
 #define _PSMI_VERBS_EP_H
 
 #include <infiniband/verbs.h>
+#ifdef RNDV_MOD
 #include <psm_rndv_mod.h>
+#endif
 #include "ptl_ips/ips_path_rec.h"
 
 #define MAX_PSM_HEADER 64			// sizeof(ips_lrh) == 56, round up to 64
@@ -258,9 +260,7 @@ typedef struct psm2_verbs_send_allocator *psm2_verbs_send_allocator_t;
 // when USE_RC, we need a separate recv pool per QP so we can prepost bufs.
 struct psm2_verbs_recv_pool {
 	struct ibv_qp *qp;	// secondary reference to QP these buffers are for
-#ifdef PSM_FI
 	psm2_ep_t ep;
-#endif
 	// our preregistered recv buffers
 	uint32_t recv_buffer_size;
 	uint32_t recv_total;
@@ -285,7 +285,6 @@ typedef struct psm2_verbs_recv_pool *psm2_verbs_recv_pool_t;
 // TODO - later could optimize cache hit rates by putting some of the less
 // frequently used fields in a different part of psm2_ep struct
 struct psm2_verbs_ep {
-	char   *ib_devname;
 	//struct ibv_device *ib_dev;
 	struct ibv_context *context;
 	struct ibv_port_attr port_attr;
@@ -316,10 +315,12 @@ struct psm2_verbs_ep {
 	rbuf_t revisit_buf;
 	uint32_t revisit_payload_size;
 #endif
+#ifdef RNDV_MOD
 	psm2_rv_t rv;	// rendezvous module open handle
 	uint32_t rv_index;
 	struct psm2_rv_conn_stats rv_conn_stats;
 	struct psm2_rv_event_stats rv_event_stats;
+#endif
 };
 
 // given index, return buffer start
@@ -333,6 +334,7 @@ struct psm2_verbs_ep {
 #define recv_buffer_index(pool, buf) (((buf)-(pool)->recv_buffers)/(pool)->recv_buffer_size)
 
 extern psm2_error_t __psm2_ep_open_verbs(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key);
+extern void __psm2_ep_initstats_verbs(psm2_ep_t ep);
 extern void __psm2_ep_free_verbs(psm2_ep_t ep);
 extern psm2_error_t __psm2_ep_initialize_queues(psm2_ep_t ep);
 extern struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context,
@@ -369,17 +371,17 @@ extern psm2_error_t psm2_verbs_post_rdma_write_immed(psm2_ep_t ep,
 				uint64_t rem_buf, uint32_t rkey,
 				size_t len, uint32_t immed, uint64_t wr_id);
 
+#ifdef RNDV_MOD
 extern psm2_error_t psm2_verbs_post_rv_rdma_write_immed(psm2_ep_t ep,
 				psm2_rv_conn_t conn,
 				void *loc_buf, struct psm2_verbs_mr *loc_mr,
 				uint64_t rem_buf, uint32_t rkey,
 				size_t len, uint32_t immed, uint64_t wr_id,
 				uint8_t *sconn_index, uint32_t *conn_count);
-
+#endif
 
 extern psm2_error_t psm2_verbs_completion_update(psm2_ep_t ep);
 
-extern void __psm2_dump_buf(uint8_t *buf, uint32_t len);
 extern int __psm2_nonzero_gid(const union ibv_gid *gid);
 extern char *__psm2_dump_gid(union ibv_gid *gid, char *buf, size_t bufsize);
 extern void __psm2_dump_verbs_qp(struct ibv_qp *qp);

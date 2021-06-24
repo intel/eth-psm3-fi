@@ -345,19 +345,20 @@ psm2_mq_finalize(psm2_mq_t mq);
 typedef
 //struct psm2_mq_tag {
 union psm2_mq_tag {
-//    union {
-		uint32_t tag[PSM2_MQ_TAG_ELEMENTS]; /* No longer specifying
-						     * alignment as it makes
-						     * code break with newer
-						     * compilers. */
-
-            /**< 3 x 32bit array representation of @ref psm2_mq_tag */
-		struct {
-			uint32_t tag0; /**< 1 of 3 uint32_t tag values */
-			uint32_t tag1; /**< 2 of 3 uint32_t tag values */
-			uint32_t tag2; /**< 3 of 3 uint32_t tag values */
-		};
-//	};
+	uint32_t tag[PSM2_MQ_TAG_ELEMENTS]; /* No longer specifying
+					     * alignment as it makes
+					     * code break with newer
+					     * compilers. */
+	/**< 3 x 32bit array representation of @ref psm2_mq_tag */
+	struct {
+		uint32_t tag0; /**< 1 of 3 uint32_t tag values */
+		uint32_t tag1; /**< 2 of 3 uint32_t tag values */
+		uint32_t tag2; /**< 3 of 3 uint32_t tag values */
+	};
+	struct {
+		uint64_t tag64; /**< uint64_t tag values */
+		uint32_t res; /**< uint32_t reserved */
+	};
 } psm2_mq_tag_t;
 
 /** @brief MQ Non-blocking operation status
@@ -1568,9 +1569,9 @@ struct psm2_mq_stats {
 	uint64_t rx_user_bytes;
 	/** Messages received into a matched user buffer */
 	uint64_t rx_user_num;
-	/** Bytes received into an unmatched system buffer */
+	/** Bytes received into an unmatched (or out of order) system buffer */
 	uint64_t rx_sys_bytes;
-	/** Messages received into an unmatched system buffer */
+	/** Messages received into an unmatched (or out of order) system buffer */
 	uint64_t rx_sys_num;
 
 	/** Total Messages transmitted (shm and hfi) */
@@ -1596,8 +1597,34 @@ struct psm2_mq_stats {
 	/** rank in MPI_COMM_WORLD, while unchanging, easiest to put here */
 	uint64_t comm_world_rank;
 
+#ifdef PSM_CUDA
+	/** Messages transmitted eagerly from CPU buffer */
+	uint64_t tx_eager_cpu_num;
+	/** Bytes transmitted eagerly from CPU buffer */
+	uint64_t tx_eager_cpu_bytes;
+	/** Messages transmitted eagerly from GPU buffer */
+	uint64_t tx_eager_gpu_num;
+	/** Bytes transmitted eagerly from GPU buffer */
+	uint64_t tx_eager_gpu_bytes;
+
+	/** Bytes copied from a system buffer into a matched CPU user buffer */
+	uint64_t rx_sysbuf_cpu_bytes;
+	/** Messages copied from a system buffer into a matched CPU user buffer */
+	uint64_t rx_sysbuf_cpu_num;
+	/** Bytes gdrCopied from a system buffer into a matched user GPU buffer */
+	uint64_t rx_sysbuf_gdrcopy_bytes;
+	/** Messages gdrCopied from a system buffer into a matched user GPU buffer */
+	uint64_t rx_sysbuf_gdrcopy_num;
+	/** Bytes cuCopied from a system buffer into a matched user GPU buffer */
+	uint64_t rx_sysbuf_cuCopy_bytes;
+	/** Messages cuCopied from a system buffer into a matched user GPU buffer */
+	uint64_t rx_sysbuf_cuCopy_num;
+
 	/** Internally reserved for future use */
+	uint64_t _reserved[5];
+#else
 	uint64_t _reserved[15];
+#endif
 };
 
 #define PSM2_MQ_NUM_STATS    13	/**< How many stats are currently used in @ref psm2_mq_stats */

@@ -80,8 +80,10 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current);
 static psm2_error_t
 ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current);
 
+#ifdef RNDV_MOD
 static void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow);
 static void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc);
+#endif
 
 
 static void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context);
@@ -228,7 +230,9 @@ MOCKABLE(ips_protoexp_init)(const psmi_context_t *context,
 	psmi_timer_entry_init(&protoexp->timer_getreqs,
 			      ips_tid_pendtids_timer_callback, protoexp);
 	STAILQ_INIT(&protoexp->pend_getreqsq);
+#ifdef RNDV_MOD
 	STAILQ_INIT(&protoexp->pend_err_resp);
+#endif
 
 
 
@@ -281,9 +285,7 @@ MOCKABLE(ips_protoexp_init)(const psmi_context_t *context,
 				goto fail;
 			}
 
-			PSMI_CUDA_CALL(cuStreamCreate,
-				&protoexp->cudastream_recv,
-				CU_STREAM_NON_BLOCKING);
+			protoexp->cudastream_recv = NULL;
 			STAILQ_INIT(&protoexp->cudapend_getreqsq);
 		} else {
 			protoexp->cuda_hostbuf_pool_recv = NULL;
@@ -322,7 +324,9 @@ psm2_error_t ips_protoexp_fini(struct ips_protoexp *protoexp)
 		 !(protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV)) {
 		psmi_mpool_destroy(protoexp->cuda_hostbuf_pool_small_recv);
 		psmi_mpool_destroy(protoexp->cuda_hostbuf_pool_recv);
-		PSMI_CUDA_CALL(cuStreamDestroy, protoexp->cudastream_recv);
+		if (protoexp->cudastream_recv != NULL) {
+			PSMI_CUDA_CALL(cuStreamDestroy, protoexp->cudastream_recv);
+		}
 	}
 #endif
 	psmi_mpool_destroy(protoexp->tid_getreq_pool);
@@ -356,7 +360,9 @@ void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context)
 		psmi_timer_request(protoexp->timerq,
 				   &protoexp->timer_send, PSMI_TIMER_PRIO_1);
 	if (!STAILQ_EMPTY(&protoexp->pend_getreqsq)
+#ifdef RNDV_MOD
 		|| !STAILQ_EMPTY(&protoexp->pend_err_resp)
+#endif
 		)
 		psmi_timer_request(protoexp->timerq,
 				   &protoexp->timer_getreqs, PSMI_TIMER_PRIO_1);
@@ -365,7 +371,9 @@ void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context)
 
 void ips_tid_mravail_callback(struct ips_proto *proto)
 {
-	ips_tid_scbavail_callback(NULL, proto->protoexp);
+	// if we have Send DMA but not RDMA, no proto->protoexp
+	if (proto->protoexp)
+		ips_tid_scbavail_callback(NULL, proto->protoexp);
 }
 
 
@@ -455,13 +463,24 @@ ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 	    !(protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV)) ||
 	    ((req->is_buf_gpu_mem &&
 	     (protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
-	     gpudirect_recv_threshold &&
-	     length > gpudirect_recv_threshold))) {
+	     length > gpudirect_recv_limit))) {
 		getreq->cuda_hostbuf_used = 1;
 		getreq->tidgr_cuda_bytesdone = 0;
 		STAILQ_INIT(&getreq->pend_cudabuf);
-	} else
+		protoexp->proto->strat_stats.rndv_rdma_hbuf_recv++;
+		protoexp->proto->strat_stats.rndv_rdma_hbuf_recv_bytes += length;
+	} else {
 		getreq->cuda_hostbuf_used = 0;
+		if (req->is_buf_gpu_mem) {
+			protoexp->proto->strat_stats.rndv_rdma_gdr_recv++;
+			protoexp->proto->strat_stats.rndv_rdma_gdr_recv_bytes += length;
+		} else {
+#endif
+			protoexp->proto->strat_stats.rndv_rdma_cpu_recv++;
+			protoexp->proto->strat_stats.rndv_rdma_cpu_recv_bytes += length;
+#ifdef PSM_CUDA
+		}
+	}
 #endif
 
 	/* nbytes is the bytes each channel should transfer. */
@@ -583,6 +602,7 @@ ips_protoexp_send_tid_grant(struct ips_tid_recv_desc *tidrecvc)
 	PSM2_LOG_EPM(OPCODE_LONG_CTS,PSM2_LOG_TX, proto->ep->epid,
 		    flow->ipsaddr->epaddr.epid ,"tidrecvc->getreq->tidgr_sendtoken; %d",
 		    tidrecvc->getreq->tidgr_sendtoken);
+	proto->epaddr_stats.cts_rdma_send++;
 
 	ips_proto_flow_enqueue(flow, scb);
 	flow->flush(flow, NULL);
@@ -643,7 +663,9 @@ ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 	}
 #endif
 	/* Check if we can complete the send request. */
-	if (req->send_msgoff == req->req_data.send_msglen) {
+	_HFI_MMDBG("ips_protoexp_tidsendc_complete off %u req len %u\n",
+		req->send_msgoff, req->req_data.send_msglen);
+	if (req->send_msgoff >= req->req_data.send_msglen) {
 		psmi_mq_handle_rts_complete(req);
 	}
 
@@ -683,6 +705,7 @@ ips_protoexp_rdma_write_completion(uint64_t wr_id)
 	return IPS_RECVHDRQ_CONTINUE;
 }
 
+#ifdef RNDV_MOD
 // our RV RDMA Write has completed with error on our send Q
 // This is called by the send CQE polling which might be within a send
 // so it cannot issue any sends directly, otherwise we will have a recursive
@@ -705,7 +728,7 @@ ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 	}
 	protoexp = tidsendc->protoexp;
 	_HFI_MMDBG("failed rv RDMA Write on %s to %s status: '%s' (%d)\n",
-			ep->verbs_ep.ib_devname,
+			ep->dev_name,
 			psmi_epaddr_get_name(tidsendc->ipsaddr->epaddr.epid),
 			ibv_wc_status_str(wc_status),(int)wc_status);
 
@@ -733,14 +756,16 @@ ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 fail:
 	psmi_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"failed rv RDMA Write on %s to %s status: '%s' (%d)\n",
-			ep->verbs_ep.ib_devname,
+			ep->dev_name,
 			psmi_epaddr_get_name(tidsendc->ipsaddr->epaddr.epid),
 			ibv_wc_status_str(wc_status),(int)wc_status);
 fail_ret:
 	PSM2_LOG_MSG("leaving");
 	return PSM2_INTERNAL_ERR;
 }
+#endif // RNDV_MOD
 
+#ifdef RNDV_MOD
 static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tidsendc)
 {
 	ips_scb_t *scb = NULL;
@@ -764,7 +789,7 @@ static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tid
 			tidsendc->rv_sconn_index, &conn_count)) {
 		psmi_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"send_err_chk_rdma: Connect unrecoverable on %s to %s\n",
-			proto->ep->verbs_ep.ib_devname,
+			proto->ep->dev_name,
 			psmi_epaddr_get_name(ipsaddr->epaddr.epid));
 		err = PSM2_TIMEOUT; /* force a resend reschedule */
 		goto done;
@@ -798,7 +823,7 @@ static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tid
 			ipsaddr->epaddr.epid,
 			"psmi_mpool_get_obj_index(tidsendc->mqreq): %d, tidsendc->rdescid. _desc_genc %d _desc_idx: %d, tidsendc->sdescid._desc_idx: %d",
 			psmi_mpool_get_obj_index(tidsendc->mqreq),
-			tidsendc->rdesc_id._dsc_genc,tidsendc->rdescid._desc_idx,
+			tidsendc->rdescid._desc_genc,tidsendc->rdescid._desc_idx,
 			tidsendc->sdescid._desc_idx);
 
 	ips_scb_opcode(scb) = OPCODE_ERR_CHK_RDMA;
@@ -826,7 +851,9 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
+#endif // RNDV_MOD
 
+#ifdef RNDV_MOD
 // scan all alternate addresses for "expected" (multi-QP and multi-EP)
 // to see if a match for "got" can be found
 static
@@ -842,7 +869,9 @@ int ips_protoexp_ipsaddr_match(ips_epaddr_t *expected, ips_epaddr_t *got)
 
 	return 0;
 }
+#endif // RNDV_MOD
 
+#ifdef RNDV_MOD
 int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev)
 {
 	struct ips_proto *proto = rcv_ev->proto;
@@ -870,14 +899,14 @@ int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev)
 	PSM2_LOG_EPM(OPCODE_ERR_CHK_RDMA,PSM2_LOG_RX,ipsaddr->epaddr.epid,
 			proto->ep->epid,
 			"rdescid._desc_genc %d _desc_idx: %d, sdescid._desc_idx: %d",
-			rdesc_id._dsc_genc,rdescid._desc_idx, sdescid._desc_idx);
+			rdesc_id._desc_genc,rdesc_id._desc_idx, sdesc_id._desc_idx);
 
 	if (ipsaddr->rv_need_send_err_chk_rdma_resp) {
 		/* sender has >1 err chk rdma outstanding: protocol violation */
 		psmi_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"process_err_chk_rdma: Protocol Violation: > 1 outstanding from remote node %s on %s\n",
 			psmi_epaddr_get_name(ipsaddr->epaddr.epid),
-			proto->ep->verbs_ep.ib_devname);
+			proto->ep->dev_name);
 		goto do_acks;
 	}
 
@@ -946,7 +975,10 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
+#endif // RNDV_MOD
 
+
+#ifdef RNDV_MOD
 static
 void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 {
@@ -971,7 +1003,7 @@ void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 			ipsaddr->rv_err_chk_rdma_resp_need_resend,
 			ipsaddr->rv_err_chk_rdma_resp_rdesc_id._desc_genc,
 			ipsaddr->rv_err_chk_rdma_resp_rdesc_id._desc_idx,
-			ipsaddr->rv_err_chk_rdma_resp_sdesc_id._desc_idx)
+			ipsaddr->rv_err_chk_rdma_resp_sdesc_id._desc_idx);
 
 	ips_scb_opcode(scb) = OPCODE_ERR_CHK_RDMA_RESP;
 	scb->ips_lrh.khdr.kdeth0 = 0;
@@ -987,13 +1019,17 @@ void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 	// The scb will own reliable transmission of resp, we can clear flag
 	ipsaddr->rv_need_send_err_chk_rdma_resp = 0;
 
+	proto->epaddr_stats.err_chk_rdma_resp_send++;
+
 	ips_proto_flow_enqueue(flow, scb);
 	flow->flush(flow, NULL);
 
 	PSM2_LOG_MSG("leaving");
 	return;
 }
+#endif // RNDV_MOD
 
+#ifdef RNDV_MOD
 int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 {
 	struct ips_protoexp *protoexp = rcv_ev->proto->protoexp;
@@ -1013,12 +1049,14 @@ int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 
 	/* processing specific to err chk rdma resp packet */
 
+	protoexp->proto->epaddr_stats.err_chk_rdma_resp_recv++;
+
 	_HFI_MMDBG("received ERR_CHK_RDMA_RESP\n");
 	PSM2_LOG_EPM(OPCODE_ERR_CHK_RDMA,PSM2_LOG_RX,ipsaddr->epaddr.epid,
 			protoexp->proto->ep->epid,
 			"rdescid. _desc_genc %d _desc_idx: %d, sdescid._desc_idx: %d",
-			p_hdr->data[0]._dsc_genc,p_hdr->data[0]._desc_idx,
-			sdescid._desc_idx);
+			p_hdr->data[0]._desc_genc,p_hdr->data[0]._desc_idx,
+			sdesc_id._desc_idx);
 	/* Get the session send descriptor
 	 * a subset of get_tidflow in ips_proto_recv.c since we don't
 	 * have tidflow sequence numbers to check
@@ -1066,6 +1104,7 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
+#endif // RNDV_MOD
 
 // Intermediate STL100 EXTID packets can be delivered to software when
 // acks are requested.
@@ -1116,6 +1155,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 		// TBD - what to do?
 	}
 	psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & tidrecvc->protoexp->proto->ep->rdmamode);
+#ifdef RNDV_MOD
 	if (conn_type == RDMA_IMMED_RV
 		&& RDMA_UNPACK_IMMED_RV_IDX(immed) != proto->ep->verbs_ep.rv_index) {
 		// RV module should not have delivered this CQE to us
@@ -1123,6 +1163,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 				proto->ep->verbs_ep.rv_index, RDMA_UNPACK_IMMED_RV_IDX(immed));
 		return IPS_RECVHDRQ_CONTINUE;		/* skip */
 	}
+#endif
 	// For User RC conn_ref is context we set in rc_qp_create (*ipsaddr)
 	// For Kernel RC, conn_ref is the conn handle (psm2_rv_conn_get_conn_handle)
 	// maybe this should be an assert so don't add test in production code
@@ -1133,6 +1174,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 				 	conn_ref, (uint64_t)tidrecvc->ipsaddr);
 		// TBD - what to do?
 	}
+#ifdef RNDV_MOD
 	if (conn_type == RDMA_IMMED_RV
 		&& psm2_rv_conn_get_conn_handle(tidrecvc->ipsaddr->rv_conn)
 					 != conn_ref) {
@@ -1142,8 +1184,15 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 		 			psm2_rv_conn_get_conn_handle(tidrecvc->ipsaddr->rv_conn));
 		// TBD - what to do?
 	}
-	if (_HFI_PDBG_ON)
-		__psm2_dump_buf(tidrecvc->buffer, len);
+#endif
+	if (_HFI_PDBG_ON) {
+#ifdef PSM_CUDA
+		if (tidrecvc->is_ptr_gpu_backed)
+			_HFI_PDBG_DUMP_GPU(tidrecvc->buffer, len);
+		else
+#endif
+			_HFI_PDBG_DUMP(tidrecvc->buffer, len);
+	}
 
 	/* Reset the swapped generation count as we received a valid packet */
 	tidrecvc->tidflow_nswap_gen = 0;
@@ -1201,7 +1250,6 @@ psmi_cuda_reclaim_hostbufs(struct ips_tid_get_request *getreq)
 	}
 	return PSM2_OK;
 }
-
 static
 struct ips_cuda_hostbuf* psmi_allocate_chb(uint32_t window_len)
 {
@@ -1237,12 +1285,17 @@ void psmi_cuda_run_prefetcher(struct ips_protoexp *protoexp,
 		window_len =
 			ips_cuda_next_window(tidsendc->ipsaddr->window_rv,
 					     offset, req->req_data.buf_len);
-		if (window_len <= CUDA_SMALLHOSTBUF_SZ)
+		unsigned bufsz;
+		if (window_len <= CUDA_SMALLHOSTBUF_SZ) {
 			chb = (struct ips_cuda_hostbuf *) psmi_mpool_get(
 				proto->cuda_hostbuf_pool_small_send);
-		if (chb == NULL)
+			bufsz = proto->cuda_hostbuf_small_send_cfg.bufsz;
+		}
+		if (chb == NULL) {
 			chb = (struct ips_cuda_hostbuf *) psmi_mpool_get(
 				proto->cuda_hostbuf_pool_send);
+			bufsz = proto->cuda_hostbuf_send_cfg.bufsz;
+		}
 		/* were any buffers available for the prefetcher? */
 		if (chb == NULL)
 			return;
@@ -1252,6 +1305,20 @@ void psmi_cuda_run_prefetcher(struct ips_protoexp *protoexp,
 		chb->req = req;
 		chb->gpu_buf = (CUdeviceptr) req->req_data.buf + offset;
 		chb->bytes_read = 0;
+
+		if (proto->cudastream_send == NULL) {
+			PSMI_CUDA_CALL(cuStreamCreate,
+				   &proto->cudastream_send, CU_STREAM_NON_BLOCKING);
+		}
+		if (chb->host_buf == NULL) {
+			PSMI_CUDA_CALL(cuMemHostAlloc,
+				       (void **) &chb->host_buf,
+				       bufsz,
+				       CU_MEMHOSTALLOC_PORTABLE);
+		}
+		if (chb->copy_status == NULL) {
+			PSMI_CUDA_CALL(cuEventCreate, &chb->copy_status, CU_EVENT_DEFAULT);
+		}
 		PSMI_CUDA_CALL(cuMemcpyDtoHAsync,
 			       chb->host_buf, chb->gpu_buf,
 			       window_len,
@@ -1286,12 +1353,17 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 		window_len =
 			ips_cuda_next_window(tidsendc->ipsaddr->window_rv,
 					     offset, req->req_data.buf_len);
-		if (window_len <= CUDA_SMALLHOSTBUF_SZ)
+		unsigned bufsz;
+		if (window_len <= CUDA_SMALLHOSTBUF_SZ) {
 			chb = (struct ips_cuda_hostbuf *) psmi_mpool_get(
 				proto->cuda_hostbuf_pool_small_send);
-		if (chb == NULL)
+			bufsz = proto->cuda_hostbuf_small_send_cfg.bufsz;
+		}
+		if (chb == NULL) {
 			chb = (struct ips_cuda_hostbuf *) psmi_mpool_get(
 				proto->cuda_hostbuf_pool_send);
+			bufsz = proto->cuda_hostbuf_send_cfg.bufsz;
+		}
 
 		/* were any buffers available? If not force allocate */
 		if (chb == NULL) {
@@ -1305,6 +1377,19 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 		chb->req = req;
 		chb->gpu_buf = (CUdeviceptr) req->req_data.buf + offset;
 		chb->bytes_read = 0;
+		if (proto->cudastream_send == NULL) {
+			PSMI_CUDA_CALL(cuStreamCreate,
+				   &proto->cudastream_send, CU_STREAM_NON_BLOCKING);
+		}
+		if (chb->host_buf == NULL) {
+			PSMI_CUDA_CALL(cuMemHostAlloc,
+				       (void **) &chb->host_buf,
+				       bufsz,
+				       CU_MEMHOSTALLOC_PORTABLE);
+		}
+		if (chb->copy_status == NULL) {
+			PSMI_CUDA_CALL(cuEventCreate, &chb->copy_status, CU_EVENT_DEFAULT);
+		}
 		PSMI_CUDA_CALL(cuMemcpyDtoHAsync,
 			       chb->host_buf, chb->gpu_buf,
 			       window_len,
@@ -1368,7 +1453,6 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 		}
 	}
 }
-
 
 static
 psm2_chb_match_type_t psmi_find_match_in_prefeteched_chb(struct ips_cuda_hostbuf* chb,
@@ -1522,14 +1606,25 @@ ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 							0,
 						    PSMI_CUDA_CONTINUE);
 		}
-	}
+		protoexp->proto->strat_stats.rndv_rdma_hbuf_send++;
+		protoexp->proto->strat_stats.rndv_rdma_hbuf_send_bytes += tid_list->tsess_length;
+	} else if (req->is_buf_gpu_mem) {
+		protoexp->proto->strat_stats.rndv_rdma_gdr_send++;
+		protoexp->proto->strat_stats.rndv_rdma_gdr_send_bytes += tid_list->tsess_length;
+	} else
 #endif // PSM_CUDA
+	{
+		protoexp->proto->strat_stats.rndv_rdma_cpu_send++;
+		protoexp->proto->strat_stats.rndv_rdma_cpu_send_bytes += tid_list->tsess_length;
+	}
 
 	tidsendc->is_complete = 0;
 	tidsendc->reserved = 0;
+#ifdef RNDV_MOD
 	tidsendc->rv_need_err_chk_rdma = 0;
 	tidsendc->rv_sconn_index = 0;
 	tidsendc->rv_conn_count = 0;
+#endif
 
 
 	_HFI_EXP
@@ -1604,14 +1699,15 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 			// separate MR cache's per EP, so this confirms we have the same EP
 		tidsendc->mqreq->mr && tidsendc->mqreq->mr->cache == proto->mr_cache) {
 		// we can use the same MR as the whole mqreq
-		_HFI_MMDBG("CTS send chunk reference send: %p %u bytes via %p %"PRIu64"\n", tidsendc->buffer, tidsendc->length, tidsendc->mqreq->mr->addr, tidsendc->mqreq->mr->length);
+		_HFI_MMDBG("CTS send chunk reference send: %p %u bytes via %p %"PRIu64"\n",
+			tidsendc->buffer, tidsendc->length, tidsendc->mqreq->mr->addr, tidsendc->mqreq->mr->length);
 		tidsendc->mr = psm2_verbs_ref_mr(tidsendc->mqreq->mr);
 	} else {
 		// we need an MR for this chunk
 		_HFI_MMDBG("CTS send chunk register send: %p %u bytes\n", tidsendc->buffer , tidsendc->length);
 		tidsendc->mr = psm2_verbs_reg_mr(proto->mr_cache, 1,
                          proto->ep->verbs_ep.pd,
-                         tidsendc->buffer, tidsendc->length, 0
+                         tidsendc->buffer, tidsendc->length, IBV_ACCESS_RDMA
 #ifdef PSM_CUDA
 						| ((tidsendc->mqreq->is_buf_gpu_mem
 								 && !tidsendc->mqreq->cuda_hostbuf_used)
@@ -1624,36 +1720,76 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 
 	// if post_send fails below, we'll try again later
 	// completion handler decides how to handle any WQE/CQE errors
-	_HFI_MMDBG("tidsendc prior to post userbuf %p buffer %p length %u\n",
-			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length);
+	_HFI_MMDBG("tidsendc prior to post userbuf %p buffer %p length %u err %d outstanding %u\n",
+			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length,
+			err, protoexp->proto->ep->verbs_ep.send_rdma_outstanding);
+#ifdef RNDV_MOD
 	if (err == PSM2_OK) {
 		psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & protoexp->proto->ep->rdmamode);
+
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(protoexp->proto->ep->rdmamode))
 			err = psm2_verbs_post_rv_rdma_write_immed(
 				protoexp->proto->ep,
- 				tidsendc->ipsaddr->rv_conn,
+				tidsendc->ipsaddr->rv_conn,
 				tidsendc->buffer, tidsendc->mr,
 				tidsendc->tid_list.tsess_raddr, tidsendc->tid_list.tsess_rkey,
 				tidsendc->tid_list.tsess_length,
 				RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
 							 tidsendc->rdescid._desc_idx,
 							 tidsendc->ipsaddr->remote_rv_index),
- 				(uintptr_t)tidsendc,
+				(uintptr_t)tidsendc,
 				&tidsendc->rv_sconn_index, &tidsendc->rv_conn_count);
-		else
-		if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode))
+		else if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode))
 			err = psm2_verbs_post_rdma_write_immed(
 				protoexp->proto->ep,
- 				tidsendc->ipsaddr->rc_qp,
+				tidsendc->ipsaddr->rc_qp,
 				tidsendc->buffer, tidsendc->mr,
 				tidsendc->tid_list.tsess_raddr, tidsendc->tid_list.tsess_rkey,
 				tidsendc->tid_list.tsess_length,
 				RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
 							 tidsendc->rdescid._desc_idx, 0),
- 				(uintptr_t)tidsendc);
+				(uintptr_t)tidsendc);
 	}
-	if (err == PSM2_OK)
+	if (err == PSM2_OK) {
+		if (_HFI_PDBG_ON) {
+#ifdef PSM_CUDA
+			if (tidsendc->mqreq->is_buf_gpu_mem && !tidsendc->mqreq->cuda_hostbuf_used)
+				_HFI_PDBG_DUMP_GPU(tidsendc->buffer, tidsendc->tid_list.tsess_length);
+			else
+#endif
+				_HFI_PDBG_DUMP(tidsendc->buffer, tidsendc->tid_list.tsess_length);
+		}
 		tidsendc->is_complete = 1;	// send queued
+	} else
+		_HFI_MMDBG("after posted IBV Write: err %d\n", err);
+
+#else // RNDV_MOD
+	if (err == PSM2_OK) {
+		psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & protoexp->proto->ep->rdmamode);
+		if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode))
+			err = psm2_verbs_post_rdma_write_immed(
+				protoexp->proto->ep,
+				tidsendc->ipsaddr->rc_qp,
+				tidsendc->buffer, tidsendc->mr,
+				tidsendc->tid_list.tsess_raddr, tidsendc->tid_list.tsess_rkey,
+				tidsendc->tid_list.tsess_length,
+				RDMA_PACK_IMMED(tidsendc->rdescid._desc_genc,
+							 tidsendc->rdescid._desc_idx, 0),
+				(uintptr_t)tidsendc);
+	}
+	if (err == PSM2_OK) {
+		if (_HFI_PDBG_ON) {
+#ifdef PSM_CUDA
+			if (tidsendc->mqreq->is_buf_gpu_mem && !tidsendc->mqreq->cuda_hostbuf_used)
+				_HFI_PDBG_DUMP_GPU(tidsendc->buffer, tidsendc->tid_list.tsess_length);
+			else
+#endif
+				_HFI_PDBG_DUMP(tidsendc->buffer, tidsendc->tid_list.tsess_length);
+		}
+		tidsendc->is_complete = 1;	// send queued
+	} else
+		_HFI_MMDBG("after posted IBV Write 2: err %d\n", err);
+#endif // RNDV_MOD
 	return err;
 }
 
@@ -1752,6 +1888,7 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 	return err;
 }
 
+#ifdef RNDV_MOD
 // Used when err chk rdma resp indicates we must resend the rdma
 static
 void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc)
@@ -1775,6 +1912,7 @@ void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc)
 
 	PSM2_LOG_MSG("leaving");
 }
+#endif // RNDV_MOD
 
 static
 psm2_error_t
@@ -1790,9 +1928,11 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
 		tidsendc = STAILQ_FIRST(phead);
 
 		// we have some scb's and can use them to queue some more EXPTID packets
+#ifdef RNDV_MOD
 		if (tidsendc->rv_need_err_chk_rdma)
 			err = ips_protoexp_send_err_chk_rdma(tidsendc);
 		else
+#endif
 			err = ips_tid_send_exp(tidsendc);
 
 		if (tidsendc->is_complete)
@@ -1893,14 +2033,19 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	/* 4. allocate a cuda bounce buffer, if required */
 	struct ips_cuda_hostbuf *chb = NULL;
 	if (getreq->cuda_hostbuf_used) {
-		if (nbytes_this <= CUDA_SMALLHOSTBUF_SZ)
+		unsigned bufsz;
+		if (nbytes_this <= CUDA_SMALLHOSTBUF_SZ) {
 			chb = (struct ips_cuda_hostbuf *)
 				psmi_mpool_get(
 					protoexp->cuda_hostbuf_pool_small_recv);
-		if (chb == NULL)
+			bufsz = protoexp->cuda_hostbuf_small_recv_cfg.bufsz;
+		}
+		if (chb == NULL) {
 			chb = (struct ips_cuda_hostbuf *)
 				psmi_mpool_get(
 					protoexp->cuda_hostbuf_pool_recv);
+			bufsz = protoexp->cuda_hostbuf_recv_cfg.bufsz;
+		}
 		if (chb == NULL) {
 			/* Unable to get a cudahostbuf for TID.
 			 * Release the resources we're holding and reschedule.*/
@@ -1914,6 +2059,12 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 			return PSM2_EP_NO_RESOURCES;
 		}
 
+		if (chb->host_buf == NULL) {
+			PSMI_CUDA_CALL(cuMemHostAlloc,
+				       (void **) &chb->host_buf,
+				       bufsz,
+				       CU_MEMHOSTALLOC_PORTABLE);
+		}
 		tidrecvc->cuda_hostbuf = chb;
 		tidrecvc->buffer = chb->host_buf;
 		chb->size = 0;
@@ -1942,7 +2093,7 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 		_HFI_MMDBG("CTS chunk register recv: %p %u bytes\n", tidrecvc->buffer, nbytes_this);
 		tidrecvc->mr = psm2_verbs_reg_mr(proto->mr_cache, 1,
                         proto->ep->verbs_ep.pd,
-                        tidrecvc->buffer, nbytes_this, IBV_ACCESS_REMOTE_WRITE
+                        tidrecvc->buffer, nbytes_this, IBV_ACCESS_RDMA|IBV_ACCESS_REMOTE_WRITE
 #ifdef PSM_CUDA
                			| (tidrecvc->is_ptr_gpu_backed?IBV_ACCESS_IS_GPU_ADDR:0)
 #endif
@@ -2017,13 +2168,16 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 	struct ips_tid_recv_desc *tidrecvc;
 	ips_epaddr_t *ipsaddr;
 	uint32_t nbytes_this, count;
+#ifdef RNDV_MOD
 	struct ips_tid_err_resp_pend *phead_resp =
 	    &((struct ips_protoexp *)timer->context)->pend_err_resp;
+#endif
 	int ret;
 
 	PSM2_LOG_MSG("entering");
 	_HFI_MMDBG("ips_tid_pendtids_timer_callback\n");
 
+#ifdef RNDV_MOD
 	while (!STAILQ_EMPTY(phead_resp)) {
 		ipsaddr = STAILQ_FIRST(phead_resp);
 		protoexp = ipsaddr->epaddr.proto->protoexp;
@@ -2034,13 +2188,14 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 		else
 			break; // ips_tid_scbavail_callback will trigger us again
 	}
+#endif
 
 #ifdef PSM_CUDA
 	if (!(((struct ips_protoexp *)timer->context)->proto->flags
 		& IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) ||
 		((((struct ips_protoexp *)timer->context)->proto->flags &
 		   IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
-		   gpudirect_recv_threshold)) {
+		   gpudirect_recv_limit < UINT_MAX)) {
 		/* Before processing pending TID requests, first try to free up
 		 * any CUDA host buffers that are now idle. */
 		struct ips_tid_get_cudapend *cphead =
@@ -2264,13 +2419,21 @@ void psmi_cudamemcpy_tid_to_device(struct ips_tid_recv_desc *tidrecvc)
 
 	chb = tidrecvc->cuda_hostbuf;
 	chb->size += tidrecvc->recv_msglen;
-			;
+
+	if (protoexp->cudastream_recv == NULL) {
+		PSMI_CUDA_CALL(cuStreamCreate,
+			&protoexp->cudastream_recv,
+			CU_STREAM_NON_BLOCKING);
+	}
 
 	PSMI_CUDA_CALL(cuMemcpyHtoDAsync,
 		       chb->gpu_buf, chb->host_buf,
-		       tidrecvc->recv_msglen
-						,
+		       tidrecvc->recv_msglen,
 		       protoexp->cudastream_recv);
+
+	if (chb->copy_status == NULL) {
+		PSMI_CUDA_CALL(cuEventCreate, &chb->copy_status, CU_EVENT_DEFAULT);
+	}
 	PSMI_CUDA_CALL(cuEventRecord, chb->copy_status,
 		       protoexp->cudastream_recv);
 

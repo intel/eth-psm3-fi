@@ -341,6 +341,8 @@ static void psmi_cuda_stats_register()
 			&is_cuda_enabled, NULL); /* context must != NULL */
 }
 
+extern void psm2_get_gpu_bars(void);
+
 int psmi_cuda_initialize()
 {
 	psm2_error_t err = PSM2_OK;
@@ -355,6 +357,8 @@ int psmi_cuda_initialize()
 		goto fail;
 
 	PSMI_CUDA_CALL(cuInit, 0);
+
+	psm2_get_gpu_bars();
 
 	union psmi_envvar_val env_enable_gdr_copy;
 	psmi_getenv("PSM3_GDRCOPY",

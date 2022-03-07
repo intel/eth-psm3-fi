@@ -52,7 +52,7 @@ extern "C" {
 #endif
 
 
-#define SMR_VERSION	1
+#define SMR_VERSION	2
 
 #ifdef HAVE_ATOMICS
 #define SMR_FLAG_ATOMIC	(1 << 0)
@@ -123,7 +123,7 @@ struct smr_msg_hdr {
 			uint8_t	atomic_op;
 		};
 	};
-};
+} __attribute__ ((aligned(16)));
 
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 #define SMR_COMP_DATA_LEN	(SMR_MSG_DATA_LEN / 2)
@@ -185,7 +185,9 @@ struct smr_cmd {
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 #define SMR_SAR_SIZE		16384
 
-#define SMR_NAME_MAX		256
+#define SMR_DIR "/dev/shm/"
+#define SMR_NAME_MAX	256
+#define SMR_PATH_MAX	(SMR_NAME_MAX + sizeof(SMR_DIR))
 #define SMR_SOCK_NAME_MAX sizeof(((struct sockaddr_un *)0)->sun_path)
 
 struct smr_addr {
@@ -209,6 +211,13 @@ struct smr_ep_name {
 	struct smr_region *region;
 	struct dlist_entry entry;
 };
+
+static inline const char *smr_no_prefix(const char *addr)
+{
+	char *start;
+
+	return (start = strstr(addr, "://")) ? start + 3 : addr;
+}
 
 struct smr_peer {
 	struct smr_addr		peer;
@@ -236,6 +245,8 @@ struct smr_region {
 	fastlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
 				 in order to progress or post recv */
+	ofi_atomic32_t	signal;
+
 	struct smr_map	*map;
 
 	size_t		total_size;
@@ -360,6 +371,11 @@ struct smr_region *smr_map_get(struct smr_map *map, int64_t id);
 int	smr_create(const struct fi_provider *prov, struct smr_map *map,
 		   const struct smr_attr *attr, struct smr_region *volatile *smr);
 void	smr_free(struct smr_region *smr);
+
+static inline void smr_signal(struct smr_region *smr)
+{
+	ofi_atomic_set32(&smr->signal, 1);
+}
 
 #ifdef __cplusplus
 }

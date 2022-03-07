@@ -101,41 +101,48 @@ extern "C" {
 #define OFI_EQ_STRERROR(prov, level, subsys, eq, entry) \
 	OFI_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
 
-#define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type)	\
-	do {										\
-		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",			\
-				fi_tostr(&prov_attr, type));				\
-		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",			\
-				fi_tostr(&user_attr, type));				\
+#define OFI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type) \
+	do {									\
+		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",		\
+				fi_tostr(&prov_attr, type));			\
+		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",		\
+				fi_tostr(&user_attr, type));			\
 	} while (0)
 
-#define FI_INFO_STRING(provider, prov_attr, user_attr, prov_str, user_str)	\
+#define OFI_INFO_STR(provider, prov_attr, user_attr, prov_str, user_str)	\
 	do {									\
 		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n", prov_attr);	\
 		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n", user_attr);	\
 	} while (0)
 
-#define FI_INFO_CHECK(provider, prov, user, field, type)		\
-	FI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
+#define OFI_INFO_CHECK(provider, prov, user, field, type)		\
+	OFI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
 		      "Requested", type)
 
-#define FI_INFO_CHECK_VAL(provider, prov, user, field)					\
-	do {										\
-		FI_INFO(provider, FI_LOG_CORE, "Supported: %zd\n", prov->field);	\
-		FI_INFO(provider, FI_LOG_CORE, "Requested: %zd\n", user->field);	\
+#define OFI_INFO_CHECK_SIZE(provider, prov, user, field)			\
+	do {									\
+		FI_INFO(provider, FI_LOG_CORE, "Supported: %zd\n", prov->field);\
+		FI_INFO(provider, FI_LOG_CORE, "Requested: %zd\n", user->field);\
 	} while (0)
 
-#define FI_INFO_MODE(provider, prov_mode, user_mode)				\
-	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
+#define OFI_INFO_CHECK_U64(provider, prov, user, field)			\
+	do {								\
+		FI_INFO(provider, FI_LOG_CORE,				\
+			"Supported: %" PRIu64 "\n", prov->field);	\
+		FI_INFO(provider, FI_LOG_CORE,				\
+			"Requested: %" PRIu64 "\n", user->field);	\
+	} while (0)
+
+#define OFI_INFO_MODE(provider, prov_mode, user_mode)				\
+	OFI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MODE)
 
-#define FI_INFO_MR_MODE(provider, prov_mode, user_mode)			\
-	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
+#define OFI_INFO_MR_MODE(provider, prov_mode, user_mode)			\
+	OFI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MR_MODE)
 
-#define FI_INFO_NAME(provider, prov, user)				\
-	FI_INFO_STRING(provider, prov->name, user->name, "Supported",	\
-		       "Requested")
+#define OFI_INFO_NAME(provider, prov, user)				\
+	OFI_INFO_STR(provider, prov->name, user->name, "Supported", "Requested")
 
 #define ofi_after_eq(a,b)	((long)((a) - (b)) >= 0)
 #define ofi_before(a,b)		((long)((a) - (b)) < 0)
@@ -153,9 +160,14 @@ struct ofi_common_locks {
 /*
  * Provider details
  */
+typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
+				const struct fi_info *base_info,
+				struct fi_info *dest_info);
+
 struct util_prov {
 	const struct fi_provider	*prov;
 	const struct fi_info		*info;
+	ofi_alter_info_t		alter_defaults;
 	const int			flags;
 };
 
@@ -328,6 +340,12 @@ static inline void ofi_ep_lock_acquire(struct util_ep *ep)
 static inline void ofi_ep_lock_release(struct util_ep *ep)
 {
 	ep->lock_release(&ep->lock);
+}
+
+static inline bool ofi_ep_lock_held(struct util_ep *ep)
+{
+	return (ep->lock_acquire == ofi_fastlock_acquire_noop) ||
+		fastlock_held(&ep->lock);
 }
 
 static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
@@ -755,6 +773,8 @@ int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *att
 
 void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr);
 #define ofi_ip_av_get_addr ofi_av_get_addr
+void *ofi_av_addr_context(struct util_av *av, fi_addr_t fi_addr);
+
 fi_addr_t ofi_ip_av_get_fi_addr(struct util_av *av, const void *addr);
 
 int ofi_get_addr(uint32_t *addr_format, uint64_t flags,
@@ -949,10 +969,6 @@ static inline int ofi_has_util_prefix(const char *str)
 	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
 }
 
-typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
-				const struct fi_info *base_info,
-				struct fi_info *dest_info);
-
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
 		      const struct fi_info *util_hints,
@@ -1036,11 +1052,21 @@ struct ofi_ops_flow_ctrl {
 
 
 /* Dynamic receive buffering support. */
-#define OFI_OPS_DYNAMIC_RBUF "ofix_dynamic_rbuf"
+#define OFI_OPS_DYNAMIC_RBUF "ofix_dynamic_rbuf_v2"
+
+struct ofi_cq_rbuf_entry {
+	void			*op_context;
+	uint64_t		flags;
+	size_t			len;
+	void			*buf;
+	uint64_t		data;
+	uint64_t		tag;
+	void			*ep_context;
+};
 
 struct ofi_ops_dynamic_rbuf {
 	size_t	size;
-	ssize_t	(*get_rbuf)(struct fi_cq_data_entry *entry, struct iovec *iov,
+	ssize_t	(*get_rbuf)(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			    size_t *count);
 };
 

@@ -79,8 +79,8 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 12
-#define FI_REVISION_VERSION 1
+#define FI_MINOR_VERSION 14
+#define FI_REVISION_VERSION 0
 
 enum {
 	FI_PATH_MAX		= 256,
@@ -166,6 +166,8 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
+#define FI_HMEM_HOST_ALLOC	(1ULL << 45)
+#define FI_HMEM_DEVICE_ONLY	(1ULL << 46)
 #define FI_HMEM			(1ULL << 47)
 #define FI_VARIABLE_MSG		(1ULL << 48)
 #define FI_RMA_PMEM		(1ULL << 49)
@@ -208,7 +210,7 @@ enum {
 	FI_ADDR_PSMX2,		/* uint64_t[2] */
 	FI_ADDR_IB_UD,		/* uint64_t[4] */
 	FI_ADDR_EFA,
-	FI_ADDR_PSMX3,		/* uint64_t[2] */
+	FI_ADDR_PSMX3,		/* uint64_t[4] */
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -238,6 +240,7 @@ enum fi_mr_mode {
 #define FI_MR_RMA_EVENT		(1 << 8)
 #define FI_MR_ENDPOINT		(1 << 9)
 #define FI_MR_HMEM		(1 << 10)
+#define FI_MR_COLLECTIVE	(1 << 11)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
@@ -519,6 +522,8 @@ enum {
 	FI_CLASS_MC,
 	FI_CLASS_NIC,
 	FI_CLASS_AV_SET,
+	FI_CLASS_MR_CACHE,
+	FI_CLASS_MEM_MONITOR,
 };
 
 struct fi_eq_attr;
@@ -577,7 +582,10 @@ struct fid_fabric {
 	uint32_t		api_version;
 };
 
-int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context);
+int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+	      void *context);
+int fi_open(uint32_t version, const char *name, void *attr, size_t attr_len,
+	    uint64_t flags, struct fid **fid, void *context);
 
 struct fid_nic {
 	struct fid		fid;
@@ -641,6 +649,7 @@ enum {
 	FI_GETWAITOBJ,		/*enum fi_wait_obj * */
 	FI_GET_VAL,		/* struct fi_fid_var */
 	FI_SET_VAL,		/* struct fi_fid_var */
+	FI_EXPORT_FID,		/* struct fi_fid_export */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
@@ -720,6 +729,7 @@ enum fi_type {
 	FI_TYPE_FID,
 	FI_TYPE_COLLECTIVE_OP,
 	FI_TYPE_HMEM_IFACE,
+	FI_TYPE_CQ_FORMAT,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

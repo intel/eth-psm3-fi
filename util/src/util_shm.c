@@ -106,7 +106,8 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	tx_size = roundup_power_of_two(tx_count);
 	rx_size = roundup_power_of_two(rx_count);
 
-	cmd_queue_offset = sizeof(struct smr_region);
+	/* Align cmd_queue offset to 128-bit boundary. */
+	cmd_queue_offset = ofi_get_aligned_size(sizeof(struct smr_region), 16);
 	resp_queue_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
 			    sizeof(struct smr_cmd) * rx_size;
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
@@ -161,7 +162,8 @@ static int smr_retry_map(const char *name, int *fd)
 	if (old_shm == MAP_FAILED)
 		goto err;
 
-	if (old_shm->version > SMR_VERSION) {
+        /* No backwards compatibility for now. */
+	if (old_shm->version != SMR_VERSION) {
 		munmap(old_shm, sizeof(*old_shm));
 		goto err;
 	}
@@ -255,6 +257,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	*smr = mapped_addr;
 	fastlock_init(&(*smr)->lock);
+	ofi_atomic_initialize32(&(*smr)->signal, 0);
 
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
@@ -313,7 +316,7 @@ static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
 
 	smr_map = container_of(map, struct smr_map, rbmap);
 
-	return strncmp(smr_map->peers[(int64_t) data].peer.name,
+	return strncmp(smr_map->peers[(uintptr_t) data].peer.name,
 		       (char *) key, SMR_NAME_MAX);
 }
 
@@ -350,11 +353,13 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	struct smr_region *peer;
 	size_t size;
 	int fd, ret = 0;
+	struct stat sts;
 	struct dlist_entry *entry;
+	const char *name = smr_no_prefix(peer_buf->peer.name);
+	char tmp[SMR_PATH_MAX];
 
 	pthread_mutex_lock(&ep_list_lock);
-	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
-				       peer_buf->peer.name);
+	entry = dlist_find_first_match(&ep_name_list, smr_match_name, name);
 	if (entry) {
 		peer_buf->region = container_of(entry, struct smr_ep_name,
 						entry)->region;
@@ -363,10 +368,22 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	}
 	pthread_mutex_unlock(&ep_list_lock);
 
-	fd = shm_open(peer_buf->peer.name, O_RDWR, S_IRUSR | S_IWUSR);
+	fd = shm_open(name, O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		FI_WARN_ONCE(prov, FI_LOG_AV, "shm_open error\n");
 		return -errno;
+	}
+
+	memset(tmp, 0, sizeof(tmp));
+	snprintf(tmp, sizeof(tmp), "%s%s", SMR_DIR, name);
+	if (stat(tmp, &sts) == -1) {
+		ret = -errno;
+		goto out;
+	}
+
+	if (sts.st_size < sizeof(*peer)) {
+		ret = -FI_ENOENT;
+		goto out;
 	}
 
 	peer = mmap(NULL, sizeof(*peer), PROT_READ | PROT_WRITE,
@@ -380,7 +397,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	if (!peer->pid) {
 		FI_WARN(prov, FI_LOG_AV, "peer not initialized\n");
 		munmap(peer, sizeof(*peer));
-		ret = -FI_EAGAIN;
+		ret = -FI_ENOENT;
 		goto out;
 	}
 
@@ -450,10 +467,11 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	int tries = 0, ret = 0;
 
 	fastlock_acquire(&map->lock);
-	ret = ofi_rbmap_insert(&map->rbmap, (void *) name, (void *) *id, &node);
+	ret = ofi_rbmap_insert(&map->rbmap, (void *) name,
+			       (void *) (intptr_t) *id, &node);
 	if (ret) {
 		assert(ret == -FI_EALREADY);
-		*id = (int64_t) node->data;
+		*id = (intptr_t) node->data;
 		fastlock_release(&map->lock);
 		return 0;
 	}
@@ -467,7 +485,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 
 	assert(map->cur_id < SMR_MAX_PEERS && tries < SMR_MAX_PEERS);
 	*id = map->cur_id;
-	node->data = (void *) *id;
+	node->data = (void *) (intptr_t) *id;
 	strncpy(map->peers[*id].peer.name, name, SMR_NAME_MAX);
 	map->peers[*id].peer.name[SMR_NAME_MAX - 1] = '\0';
 
@@ -488,7 +506,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 
 	pthread_mutex_lock(&ep_list_lock);
 	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
-				       map->peers[id].peer.name);
+				       smr_no_prefix(map->peers[id].peer.name));
 	pthread_mutex_unlock(&ep_list_lock);
 
 	fastlock_acquire(&map->lock);
@@ -498,7 +516,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	(void) ofi_rbmap_find_delete(&map->rbmap,
 				     (void *) map->peers[id].peer.name);
 
-	map->peers[id].fiaddr = FI_ADDR_UNSPEC;	
+	map->peers[id].fiaddr = FI_ADDR_UNSPEC;
 	map->peers[id].peer.id = -1;
 
 	fastlock_release(&map->lock);

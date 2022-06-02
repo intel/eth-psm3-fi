@@ -65,7 +65,7 @@ static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_add
 	if (sock < 0)
 		return -errno;
 
-	ret = connect(sock, dest_addr, dest_addrlen);
+	ret = connect(sock, dest_addr, (socklen_t) dest_addrlen);
 	if (ret)
 		goto out;
 
@@ -135,7 +135,8 @@ void ofi_getnodename(uint16_t sa_family, char *buf, int buflen)
 				continue;
 			}
 
-			ret = getnameinfo(ifa->ifa_addr, ofi_sizeofaddr(ifa->ifa_addr),
+			ret = getnameinfo(ifa->ifa_addr,
+					  (socklen_t) ofi_sizeofaddr(ifa->ifa_addr),
 				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
 			buf[buflen - 1] = '\0';
 			if (ret == 0) {
@@ -286,7 +287,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	assert(fastlock_held(&av->lock));
+	assert(ofi_mutex_held(&av->lock));
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
@@ -310,25 +311,11 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	return 0;
 }
 
-int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
-{
-	struct util_av_entry *av_entry = NULL, *av_entry_tmp = NULL;
-	int ret;
-
-	HASH_ITER(hh, av->hash, av_entry, av_entry_tmp) {
-		ret = apply(av, av_entry->data,
-			    ofi_buf_index(av_entry), arg);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-	}
-	return 0;
-}
-
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry;
 
-	assert(fastlock_held(&av->lock));
+	assert(ofi_mutex_held(&av->lock));
 	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
@@ -352,9 +339,9 @@ fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr)
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
 {
 	fi_addr_t fi_addr;
-	fastlock_acquire(&av->lock);
+	ofi_mutex_lock(&av->lock);
 	fi_addr = ofi_av_lookup_fi_addr_unsafe(av, addr);
-	fastlock_release(&av->lock);
+	ofi_mutex_unlock(&av->lock);
 	return fi_addr;
 }
 
@@ -410,19 +397,33 @@ int ofi_av_close_lightweight(struct util_av *av)
 	if (av->eq)
 		ofi_atomic_dec32(&av->eq->ref);
 
-	fastlock_destroy(&av->ep_list_lock);
+	ofi_mutex_destroy(&av->ep_list_lock);
 
 	ofi_atomic_dec32(&av->domain->ref);
-	fastlock_destroy(&av->lock);
+	ofi_mutex_destroy(&av->lock);
 
 	return 0;
 }
 
 int ofi_av_close(struct util_av *av)
 {
-	int ret = ofi_av_close_lightweight(av);
+	int ret;
+
+	ofi_mutex_lock(&av->lock);
+	if (av->av_set) {
+		ret = fi_close(&av->av_set->av_set_fid.fid);
+		if (ret) {
+			ofi_mutex_unlock(&av->lock);
+			return ret;
+		}
+		av->av_set = NULL;
+	}
+	ofi_mutex_unlock(&av->lock);
+
+	ret = ofi_av_close_lightweight(av);
 	if (ret)
 		return ret;
+
 	util_av_close(av);
 	return 0;
 }
@@ -528,7 +529,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 
 	av->prov = domain->prov;
 	ofi_atomic_initialize32(&av->ref, 0);
-	fastlock_init(&av->lock);
+	ofi_mutex_init(&av->lock);
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	/*
 	 * ops set by provider
@@ -537,7 +538,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	 */
 	av->context = context;
 	av->domain = domain;
-	fastlock_init(&av->ep_list_lock);
+	ofi_mutex_init(&av->ep_list_lock);
 	dlist_init(&av->ep_list);
 	ofi_atomic_inc32(&domain->ref);
 	return 0;
@@ -582,7 +583,7 @@ void ofi_av_write_event(struct util_av *av, uint64_t data,
 
 	ret = fi_eq_write(&av->eq->eq_fid, FI_AV_COMPLETE, &entry,
 			  size, flags);
-	if (ret != size)
+	if ((size_t) ret != size)
 		FI_WARN(av->prov, FI_LOG_AV, "error writing to EQ\n");
 }
 
@@ -603,9 +604,9 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 	int ret;
 
 	if (ofi_valid_dest_ipaddr(addr)) {
-		fastlock_acquire(&av->lock);
+		ofi_mutex_lock(&av->lock);
 		ret = ofi_av_insert_addr(av, addr, fi_addr);
-		fastlock_release(&av->lock);
+		ofi_mutex_unlock(&av->lock);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
 		if (fi_addr)
@@ -628,6 +629,10 @@ int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
 	int ret, success_cnt = 0;
 	int *sync_err = NULL;
 	size_t i;
+
+	assert(av->addrlen >= addrlen);
+	if (av->addrlen > addrlen)
+		av->addrlen = addrlen;
 
 	FI_DBG(av->prov, FI_LOG_AV, "inserting %zu addresses\n", count);
 	if (flags & FI_SYNC_ERR) {
@@ -684,7 +689,7 @@ ip_av_ip4sym_getaddr(struct util_av *av, struct in_addr ip, size_t ipcnt,
 		     uint16_t port, size_t portcnt, void **addr, size_t *addrlen)
 {
 	struct sockaddr_in *sin;
-	int count = ipcnt * portcnt;
+	size_t count = ipcnt * portcnt;
 	size_t i, p, k;
 
 	*addrlen = sizeof(*sin);
@@ -696,12 +701,12 @@ ip_av_ip4sym_getaddr(struct util_av *av, struct in_addr ip, size_t ipcnt,
 		for (p = 0; p < portcnt; p++, k++) {
 			sin[k].sin_family = AF_INET;
 			/* TODO: should we skip addresses x.x.x.0 and x.x.x.255? */
-			sin[k].sin_addr.s_addr = htonl(ntohl(ip.s_addr) + i);
-			sin[k].sin_port = htons(port + p);
+			sin[k].sin_addr.s_addr = htonl(ntohl(ip.s_addr) + (uint32_t) i);
+			sin[k].sin_port = htons(port + (uint16_t) p);
 		}
 	}
 	*addr = sin;
-	return count;
+	return (int) count;
 }
 
 /* Caller should free *addr */
@@ -710,7 +715,7 @@ ip_av_ip6sym_getaddr(struct util_av *av, struct in6_addr ip, size_t ipcnt,
 		     uint16_t port, size_t portcnt, void **addr, size_t *addrlen)
 {
 	struct sockaddr_in6 *sin6, sin6_temp;
-	int j, count = ipcnt * portcnt;
+	int j, count = (int)(ipcnt * portcnt);
 	size_t i, p, k;
 
 	*addrlen = sizeof(*sin6);
@@ -724,7 +729,7 @@ ip_av_ip6sym_getaddr(struct util_av *av, struct in6_addr ip, size_t ipcnt,
 		for (p = 0; p < portcnt; p++, k++) {
 			sin6[k].sin6_family = AF_INET6;
 			sin6[k].sin6_addr = sin6_temp.sin6_addr;
-			sin6[k].sin6_port = htons(port + p);
+			sin6[k].sin6_port = htons((uint16_t)(port + p));
 		}
 		/* TODO: should we skip addresses x::0 and x::255? */
 		for (j = 15; j >= 0; j--) {
@@ -746,7 +751,7 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 	char name[FI_NAME_MAX];
 	char svc[FI_NAME_MAX];
 	size_t name_len, n, s;
-	int ret, name_index, svc_index, count = nodecnt * svccnt;
+	int ret, name_index, svc_index, count = (int)(nodecnt * svccnt);
 
 	memset(&hints, 0, sizeof hints);
 
@@ -799,8 +804,10 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 				"insert\n", node, service);
 
 			ret = getaddrinfo(node, service, &hints, &ai);
-			if (ret)
+			if (ret) {
+				ret = -abs(ret);
 				goto err;
+			}
 
 			memcpy(addr_temp, ai->ai_addr, *addrlen);
 			addr_temp = (char *)addr_temp + *addrlen;
@@ -878,7 +885,8 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		     size_t count, uint64_t flags)
 {
 	struct util_av *av;
-	int i, ret;
+	ssize_t i;
+	int ret;
 
 	av = container_of(av_fid, struct util_av, av_fid);
 	if (flags) {
@@ -893,9 +901,9 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	 * Thus, we walk through the array backwards.
 	 */
 	for (i = count - 1; i >= 0; i--) {
-		fastlock_acquire(&av->lock);
+		ofi_mutex_lock(&av->lock);
 		ret = ofi_av_remove_addr(av, fi_addr[i]);
-		fastlock_release(&av->lock);
+		ofi_mutex_unlock(&av->lock);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"removal of fi_addr %"PRIu64" failed\n",

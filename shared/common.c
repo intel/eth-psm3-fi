@@ -67,6 +67,7 @@
 #include <ofi_util.h>
 #include <ofi_epoll.h>
 #include <ofi_list.h>
+#include <ofi_lock.h>
 #include <ofi_osd.h>
 #include <ofi_iov.h>
 #include <shared/ofi_str.h>
@@ -83,6 +84,58 @@ struct ofi_common_locks common_locks = {
 };
 
 size_t ofi_universe_size = 1024;
+int ofi_poll_fairness = 0;
+
+
+int ofi_genlock_init(struct ofi_genlock *lock,
+		     enum ofi_lock_type lock_type)
+{
+	int ret;
+
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		ret = ofi_spin_init(&lock->base.spinlock);
+		lock->lock = (ofi_genlock_lockop_t) ofi_spin_lock_op;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_spin_unlock_op;
+		lock->held = (ofi_genlock_lockheld_t) ofi_spin_held_op;
+		break;
+	case OFI_LOCK_MUTEX:
+		ret = ofi_mutex_init(&lock->base.mutex);
+		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_op;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_op;
+		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
+		break;
+	case OFI_LOCK_NONE:
+		/* Use mutex for debug no-op support */
+		ret = ofi_mutex_init(&lock->base.mutex);
+		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_noop;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_noop;
+		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
+		break;
+	default:
+		ret = -FI_EINVAL;
+		break;
+	};
+
+	return ret;
+}
+
+void ofi_genlock_destroy(struct ofi_genlock *lock)
+{
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		ofi_spin_destroy(&lock->base.spinlock);
+		break;
+	case OFI_LOCK_MUTEX:
+	case OFI_LOCK_NONE:
+		ofi_mutex_destroy(&lock->base.mutex);
+		break;
+	default:
+		assert(0);
+		break;
+	};
+}
+
 
 int fi_poll_fd(int fd, int timeout)
 {
@@ -314,9 +367,8 @@ sa_sin:
 			       sizeof(str)))
 			return NULL;
 
-		size = snprintf(buf, MIN(*len, sizeof(str)),
-				"fi_sockaddr_in://%s:%" PRIu16, str,
-				ntohs(sin->sin_port));
+		size = snprintf(buf, *len, "fi_sockaddr_in://%s:%" PRIu16,
+				str, ntohs(sin->sin_port));
 		break;
 	case FI_SOCKADDR_IN6:
 sa_sin6:
@@ -325,9 +377,8 @@ sa_sin6:
 			       sizeof(str)))
 			return NULL;
 
-		size = snprintf(buf, MIN(*len, sizeof(str)),
-				"fi_sockaddr_in6://[%s]:%" PRIu16, str,
-				ntohs(sin6->sin6_port));
+		size = snprintf(buf, *len, "fi_sockaddr_in6://[%s]:%" PRIu16,
+				str, ntohs(sin6->sin6_port));
 		break;
 	case FI_ADDR_EFA:
 		memset(str, 0, sizeof(str));
@@ -372,6 +423,9 @@ sa_sin6:
 		break;
 	case FI_ADDR_BGQ:
 		size = snprintf(buf, *len, "fi_addr_bgq://%p", addr);
+		break;
+	case FI_ADDR_OPX:
+		size = snprintf(buf, *len, "fi_addr_opx://%016lx", *(uint64_t *)addr);
 		break;
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
@@ -429,6 +483,8 @@ uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_GNI;
 	else if (!strcasecmp(fmt, "fi_addr_bgq"))
 		return FI_ADDR_BGQ;
+	else if (!strcasecmp(fmt, "fi_addr_opx"))
+		return FI_ADDR_OPX;
 	else if (!strcasecmp(fmt, "fi_addr_efa"))
 		return FI_ADDR_EFA;
 	else if (!strcasecmp(fmt, "fi_addr_mlx"))
@@ -493,6 +549,23 @@ static int ofi_str_to_psmx3(const char *str, void **addr, size_t *len)
 	return -FI_EINVAL;
 }
 
+static int ofi_str_to_opx(const char *str, void **addr, size_t *len)
+{
+	int ret;
+
+	*len = sizeof(uint64_t);
+	*addr = calloc(1, *len);
+	if (!(*addr))
+		return -FI_ENOMEM;
+
+	ret = sscanf(str, "%*[^:]://%" SCNx64, (uint64_t *) *addr);
+	if (ret == 1)
+		return 0;
+
+	free(*addr);
+	return -FI_EINVAL;
+}
+
 static int ofi_str_to_ib_ud(const char *str, void **addr, size_t *len)
 {
 	int ret;
@@ -550,7 +623,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 		return -FI_EINVAL;
 	}
 
-	pkey = strtol(tok, &endptr, 0);
+	pkey = (uint16_t) strtol(tok, &endptr, 0);
 	if (*endptr) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Invalid pkey in address: %s\n", str);
@@ -564,7 +637,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 		return -FI_EINVAL;
 	}
 
-	ps = strtol(tok, &endptr, 0);
+	ps = (uint16_t) strtol(tok, &endptr, 0);
 	if (*endptr) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Invalid port space in address: %s\n", str);
@@ -588,7 +661,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 	/* Port is optional */
 	tok = strtok_r(NULL, ":", &saveptr);
 	if (tok)
-		port = strtol(tok, &endptr, 0);
+		port = (uint16_t) strtol(tok, &endptr, 0);
 	else
 		port = 0;
 
@@ -617,7 +690,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 
 static int ofi_str_to_efa(const char *str, void **addr, size_t *len)
 {
-	char gid[INET6_ADDRSTRLEN];
+	char gid[INET6_ADDRSTRLEN + 1];
 	uint16_t *qpn;
 	uint32_t *qkey;
 	int ret;
@@ -630,7 +703,7 @@ static int ofi_str_to_efa(const char *str, void **addr, size_t *len)
 		return -FI_ENOMEM;
 	qpn = (uint16_t *)*addr + 8;
 	qkey = (uint32_t *)*addr + 5;
-	ret = sscanf(str, "%*[^:]://[%64[^]]]:%" SCNu16 ":%" SCNu32, gid, qpn, qkey);
+	ret = sscanf(str, "%*[^:]://[%46[^]]]:%" SCNu16 ":%" SCNu32, gid, qpn, qkey);
 	if (ret < 1)
 		goto err;
 
@@ -645,7 +718,7 @@ err:
 static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 {
 	struct sockaddr_in *sin;
-	char ip[64];
+	char ip[65];
 	int ret;
 
 	*len = sizeof(*sin);
@@ -690,7 +763,7 @@ match_port:
 static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 {
 	struct sockaddr_in6 *sin6;
-	char ip[64];
+	char ip[65];
 	int ret;
 
 	*len = sizeof(*sin6);
@@ -827,6 +900,8 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 		return ofi_str_to_psmx2(str, addr, len);
 	case FI_ADDR_PSMX3:
 		return ofi_str_to_psmx3(str, addr, len);
+	case FI_ADDR_OPX:
+		return ofi_str_to_opx(str, addr, len);
 	case FI_ADDR_IB_UD:
 		return ofi_str_to_ib_ud(str, addr, len);
 	case FI_ADDR_EFA:
@@ -997,7 +1072,7 @@ void ofi_straddr_log_internal(const char *func, int line,
 	}
 }
 
-int ofi_discard_socket(SOCKET sock, size_t len)
+ssize_t ofi_discard_socket(SOCKET sock, size_t len)
 {
 	char buf;
 	ssize_t ret = 0;
@@ -1022,7 +1097,7 @@ size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 	len = ofi_copy_iov_buf(iov, cnt, offset, &byteq->data[byteq->head],
 			       avail, OFI_COPY_BUF_TO_IOV);
 	if (len < avail) {
-		byteq->head += len;
+		byteq->head += (unsigned) len;
 	} else {
 		byteq->head = 0;
 		byteq->tail = 0;
@@ -1045,7 +1120,7 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 	for (i = 0; i < cnt; i++) {
 		memcpy(&byteq->data[byteq->tail], iov[i].iov_base,
 		       iov[i].iov_len);
-		byteq->tail += iov[i].iov_len;
+		byteq->tail += (unsigned) iov[i].iov_len;
 	}
 }
 
@@ -1053,14 +1128,19 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 {
 	ssize_t ret;
+	int err;
 
 	if (!ofi_bsock_tosend(bsock))
 		return 0;
 
 	ret = ofi_byteq_send(&bsock->sq, bsock->sock);
 	if (ret < 0) {
-		return ofi_sockerr() == EPIPE ?
-			-FI_ENOTCONN : -ofi_sockerr();
+		err = ofi_sockerr();
+		if (err == EPIPE)
+			return -FI_ENOTCONN;
+		if (err == EWOULDBLOCK)
+			return -FI_EAGAIN;
+		return -err;
 	}
 
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
@@ -1311,7 +1391,7 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 {
 	struct pollfd *fds;
-	void *contexts;
+	struct ofi_pollfds_ctx *ctx;
 	size_t size;
 
 	if (max_size < pfds->size)
@@ -1321,22 +1401,25 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 	if (size < pfds->size + 64)
 		size = pfds->size + 64;
 
-	fds = calloc(size, sizeof(*pfds->fds) + sizeof(*pfds->context));
+	fds = calloc(size, sizeof(*pfds->fds) + sizeof(*pfds->ctx));
 	if (!fds)
 		return -FI_ENOMEM;
 
-	contexts = fds + size;
+	ctx = (struct ofi_pollfds_ctx *) (fds + size);
 	if (pfds->size) {
 		memcpy(fds, pfds->fds, pfds->size * sizeof(*pfds->fds));
-		memcpy(contexts, pfds->context, pfds->size * sizeof(*pfds->context));
+		memcpy(ctx, pfds->ctx, pfds->size * sizeof(*pfds->ctx));
 		free(pfds->fds);
 	}
 
-	while (pfds->size < size)
+	while (pfds->size < size) {
+		ctx[pfds->size].index = -1;
+		ctx[pfds->size].hot_index = -1;
 		fds[pfds->size++].fd = INVALID_SOCKET;
+	}
 
 	pfds->fds = fds;
-	pfds->context = contexts;
+	pfds->ctx = ctx;
 	return FI_SUCCESS;
 }
 
@@ -1356,17 +1439,75 @@ int ofi_pollfds_create(struct ofi_pollfds **pfds)
 	if (ret)
 		goto err2;
 
-	(*pfds)->fds[(*pfds)->nfds].fd = (*pfds)->signal.fd[FI_READ_FD];
-	(*pfds)->fds[(*pfds)->nfds].events = POLLIN;
-	(*pfds)->context[(*pfds)->nfds++] = NULL;
+	(*pfds)->fds[0].fd = (*pfds)->signal.fd[FI_READ_FD];
+	(*pfds)->fds[0].events = POLLIN;
+	(*pfds)->nfds++;
 	slist_init(&(*pfds)->work_item_list);
-	fastlock_init(&(*pfds)->lock);
+	ofi_mutex_init(&(*pfds)->lock);
 	return FI_SUCCESS;
 err2:
 	free((*pfds)->fds);
 err1:
 	free(*pfds);
 	return ret;
+}
+
+void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd)
+{
+	struct pollfd *new_fds;
+	struct ofi_pollfds_ctx *ctx;
+	int size;
+
+	assert(ofi_poll_fairness && fd >= 0);
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (!ctx || ctx->hot_index >= 0)
+		return;
+
+	if (pfds->hot_nfds >= pfds->hot_size) {
+		size = pfds->hot_size + 8;
+		new_fds = calloc(size, sizeof(*new_fds));
+		if (!new_fds)
+			return;
+
+		if (pfds->hot_size) {
+			memcpy(new_fds, pfds->hot_fds,
+			       pfds->hot_size * sizeof(*new_fds));
+			free(pfds->hot_fds);
+		}
+
+		pfds->hot_fds = new_fds;
+		pfds->hot_size = size;
+	}
+
+	pfds->hot_fds[pfds->hot_nfds] = pfds->fds[ctx->index];
+	ctx->hot_index = pfds->hot_nfds++;
+	ctx->hit_cnt = 1;
+}
+
+void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd)
+{
+	struct ofi_pollfds_ctx *swap_ctx, *ctx;
+	struct pollfd *swap_pfd;
+
+	assert(ofi_poll_fairness && fd >= 0);
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (!ctx || ctx->hot_index < 0)
+		return;
+
+	assert(pfds->hot_nfds);
+	if (ctx->hot_index < pfds->hot_nfds - 1) {
+		swap_pfd = &pfds->hot_fds[pfds->hot_nfds - 1];
+		swap_ctx = ofi_pollfds_get_ctx(pfds, swap_pfd->fd);
+		assert(swap_ctx);
+
+		pfds->hot_fds[ctx->hot_index] = *swap_pfd;
+		swap_ctx->hot_index = ctx->hot_index;
+	}
+
+	OFI_DBG_SET(pfds->hot_fds[pfds->hot_nfds].fd, INVALID_SOCKET);
+	pfds->hot_nfds--;
+	ctx->hot_index = -1;
+	ctx->hit_cnt = 0;
 }
 
 static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
@@ -1382,10 +1523,10 @@ static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
 	item->events = events;
 	item->context = context;
 	item->type = op;
-	fastlock_acquire(&pfds->lock);
+	ofi_mutex_lock(&pfds->lock);
 	slist_insert_tail(&item->entry, &pfds->work_item_list);
 	fd_signal_set(&pfds->signal);
-	fastlock_release(&pfds->lock);
+	ofi_mutex_unlock(&pfds->lock);
 	return 0;
 }
 
@@ -1416,14 +1557,17 @@ static int ofi_pollfds_find(struct slist_entry *entry, const void *arg)
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context)
 {
+	struct ofi_pollfds_ctx *ctx;
 	struct slist_entry *entry;
 	struct ofi_pollfds_work_item *item;
-	int ret;
 
-	fastlock_acquire(&pfds->lock);
-	ret = ofi_pollfds_do_mod(pfds, fd, events, context);
-	if (!ret)
+	ofi_mutex_lock(&pfds->lock);
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (ctx) {
+		pfds->fds[ctx->index].events = (short) events;
+		ctx->context = context;
 		goto signal;
+	}
 
 	/* fd may be queued for insertion */
 	entry = slist_find_first_match(&pfds->work_item_list, ofi_pollfds_find,
@@ -1436,13 +1580,64 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 
 signal:
 	fd_signal_set(&pfds->signal);
-	fastlock_release(&pfds->lock);
+	ofi_mutex_unlock(&pfds->lock);
 	return 0;
 }
 
 int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
 {
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_DEL, fd, 0, NULL);
+}
+
+static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
+			       struct ofi_pollfds_work_item *item)
+{
+	struct ofi_pollfds_ctx *ctx, *swap_ctx;
+	struct pollfd *swap_pfd;
+
+	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	if (!ctx)
+		return;
+
+	if (ofi_poll_fairness && ctx->hot_index >= 0)
+		ofi_pollfds_coolfd(pfds, item->fd);
+
+	if (ctx->index < pfds->nfds - 1) {
+		swap_pfd = &pfds->fds[pfds->nfds - 1];
+		swap_ctx = ofi_pollfds_get_ctx(pfds, swap_pfd->fd);
+		assert(swap_ctx);
+		swap_ctx->index = ctx->index;
+		pfds->fds[swap_ctx->index] = *swap_pfd;
+
+		swap_pfd->fd = INVALID_SOCKET;
+		swap_pfd->events = 0;
+		swap_pfd->revents = 0;
+	}
+	pfds->nfds--;
+	ctx->index = -1;
+}
+
+static void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
+			       struct ofi_pollfds_work_item *item)
+{
+	struct ofi_pollfds_ctx *ctx;
+
+	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	if (!ctx) {
+		ctx = ofi_pollfds_alloc_ctx(pfds, item->fd);
+		if (!ctx) {
+			assert(0);
+			return;
+		}
+	}
+
+	ctx->context = item->context;
+	pfds->fds[ctx->index].fd = item->fd;
+	pfds->fds[ctx->index].events = (short) item->events;
+	pfds->fds[ctx->index].revents = 0;
+
+	if (ofi_poll_fairness)
+		ofi_pollfds_heatfd(pfds, item->fd);
 }
 
 static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
@@ -1467,21 +1662,73 @@ static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 		}
 		free(item);
 	}
+	pfds->fairness_cntr = 0;
 }
 
-int ofi_pollfds_wait(struct ofi_pollfds *pfds,
-		     struct ofi_epollfds_event *events,
-		     int maxevents, int timeout)
+static int ofi_pollfds_hotties(struct ofi_pollfds *pfds,
+			       struct ofi_epollfds_event *events,
+			       int maxevents)
 {
+	struct ofi_pollfds_ctx *ctx;
+	int found, i, ret;
+
+	assert(ofi_poll_fairness);
+	ret = poll(pfds->hot_fds, pfds->hot_nfds, 0);
+	if (ret == SOCKET_ERROR)
+		return -ofi_sockerr();
+	else if (ret == 0)
+		return 0;
+
+	found = 0;
+	ret = MIN(maxevents, ret);
+
+	for (i = 0; i < pfds->hot_nfds && found < ret; i++) {
+		if (pfds->hot_fds[i].revents) {
+			events[found].events = pfds->hot_fds[i].revents;
+
+			ctx = ofi_pollfds_get_ctx(pfds, pfds->hot_fds[i].fd);
+			if (ctx && ctx->hot_index == i) {
+				events[found++].data.ptr = ctx->context;
+				ctx->hit_cnt++;
+			}
+		}
+	}
+
+	return found;
+}
+
+static void ofi_pollfds_adjust_temp(struct ofi_pollfds *pfds, int fd)
+{
+	struct pollfd *pfd;
+	struct ofi_pollfds_ctx *ctx;
+
+	assert(ofi_poll_fairness && fd >= 0);
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (!ctx)
+		return;
+
+	pfd = &pfds->fds[ctx->index];
+
+	if (pfd->revents || ctx->hit_cnt || (pfd->events & POLLOUT)) {
+		ctx->hit_cnt = 0;
+		if (ctx->hot_index == -1)
+			ofi_pollfds_heatfd(pfds, fd);
+
+	} else if (ctx->hot_index != -1) {
+		ofi_pollfds_coolfd(pfds, fd);
+	}
+}
+
+static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
+			       struct ofi_epollfds_event *events,
+			       int maxevents, int timeout)
+{
+	struct ofi_pollfds_ctx *ctx;
+	uint64_t endtime;
 	int i, ret;
 	int found = 0;
-	uint64_t start = (timeout > 0) ? ofi_gettime_ms() : 0;
 
-	fastlock_acquire(&pfds->lock);
-	if (!slist_empty(&pfds->work_item_list))
-		ofi_pollfds_process_work(pfds);
-	fastlock_release(&pfds->lock);
-
+	endtime = ofi_timeout_time(timeout);
 	do {
 		ret = poll(pfds->fds, pfds->nfds, timeout);
 		if (ret == SOCKET_ERROR)
@@ -1489,10 +1736,10 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		else if (ret == 0)
 			return 0;
 
-		fastlock_acquire(&pfds->lock);
+		ofi_mutex_lock(&pfds->lock);
 		if (!slist_empty(&pfds->work_item_list))
 			ofi_pollfds_process_work(pfds);
-		fastlock_release(&pfds->lock);
+		ofi_mutex_unlock(&pfds->lock);
 
 		if (pfds->fds[0].revents) {
 			fd_signal_reset(&pfds->signal);
@@ -1505,16 +1752,49 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		for (i = 1; i < pfds->nfds && found < ret; i++) {
 			if (pfds->fds[i].revents) {
 				events[found].events = pfds->fds[i].revents;
-				events[found++].data.ptr = pfds->context[i];
+				ctx = ofi_pollfds_get_ctx(pfds, pfds->fds[i].fd);
+				if (ctx)
+					events[found++].data.ptr = ctx->context;
+			}
+
+			if (ofi_poll_fairness && pfds->fds[i].fd >= 0)
+				ofi_pollfds_adjust_temp(pfds, pfds->fds[i].fd);
+		}
+
+		if (ofi_poll_fairness) {
+			for (; i < pfds->nfds; i++) {
+				if (pfds->fds[i].fd >= 0)
+					ofi_pollfds_adjust_temp(pfds, pfds->fds[i].fd);
 			}
 		}
 
-		if (!found && timeout > 0)
-			timeout -= (int) (ofi_gettime_ms() - start);
-
-	} while (timeout > 0 && !found);
+	} while (!found && !ofi_adjust_timeout(endtime, &timeout));
 
 	return found;
+}
+
+int ofi_pollfds_wait(struct ofi_pollfds *pfds,
+		     struct ofi_epollfds_event *events,
+		     int maxevents, int timeout)
+{
+	int ret;
+
+	ofi_mutex_lock(&pfds->lock);
+	if (!slist_empty(&pfds->work_item_list))
+		ofi_pollfds_process_work(pfds);
+	ofi_mutex_unlock(&pfds->lock);
+
+	if ((pfds->fairness_cntr > 0) && (timeout == 0) && pfds->hot_nfds) {
+		assert(ofi_poll_fairness);
+		ret = ofi_pollfds_hotties(pfds, events, maxevents);
+		pfds->fairness_cntr--;
+	} else {
+		ret = ofi_pollfds_waitall(pfds, events, maxevents, timeout);
+		if (ofi_poll_fairness)
+			pfds->fairness_cntr = ofi_poll_fairness;
+	}
+
+	return ret;
 }
 
 void ofi_pollfds_close(struct ofi_pollfds *pfds)
@@ -1530,7 +1810,7 @@ void ofi_pollfds_close(struct ofi_pollfds *pfds)
 					    entry);
 			free(item);
 		}
-		fastlock_destroy(&pfds->lock);
+		ofi_mutex_destroy(&pfds->lock);
 		fd_signal_free(&pfds->signal);
 		free(pfds->fds);
 		free(pfds);
@@ -2125,3 +2405,6 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 
 	return width_val * speed_val;
 }
+
+/* log_prefix is used by fi_log and by prov/util */
+const char *log_prefix = "";

@@ -166,6 +166,8 @@ void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
  */
 void ofi_monitors_init(void)
 {
+	pthread_mutex_init(&mm_state_lock, NULL);
+
 	uffd_monitor->init(uffd_monitor);
 	memhooks_monitor->init(memhooks_monitor);
 	cuda_monitor->init(cuda_monitor);
@@ -196,13 +198,13 @@ void ofi_monitors_init(void)
 			" memory caching.");
 	fi_param_define(NULL, "mr_cuda_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the CUDA cache memory monitor."
-			"Monitor is enabled by default.");
+			"Enabled by default.");
 	fi_param_define(NULL, "mr_rocr_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the ROCR cache memory monitor. "
-			"Monitor is enabled by default.");
+			"Enabled by default.");
 	fi_param_define(NULL, "mr_ze_cache_monitor_enabled", FI_PARAM_BOOL,
-			"Enable or disable the ZE cache memory monitor. "
-			"Monitor is enabled by default.");
+			"Enable or disable the oneAPI Level Zero cache memory "
+			"monitor.  Enabled by default.");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
@@ -742,7 +744,7 @@ static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 					   union ofi_mr_hmem_info *hmem_info)
 {
 	assert(impmon.impfid);
-	return impmon.impfid->export_ops->unsubscribe(impmon.impfid, addr, len);
+	impmon.impfid->export_ops->unsubscribe(impmon.impfid, addr, len);
 }
 
 static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,

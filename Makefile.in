@@ -109,6 +109,7 @@ host_triplet = @host@
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_am.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_ips.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_self.la \
+@HAVE_PSM3_SRC_TRUE@	psm3/libhal_gen1.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_verbs.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_sockets.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i.la
@@ -119,6 +120,7 @@ host_triplet = @host@
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libptl_ips_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libptl_self_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libutils_la_SOURCES) \
+@HAVE_PSM3_SRC_TRUE@	$(psm3_libhal_gen1_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libhal_verbs_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libhal_sockets_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libpsm3i_la_SOURCES) \
@@ -130,7 +132,7 @@ host_triplet = @host@
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i.la
 
 @HAVE_PSM3_SRC_FALSE@am__append_14 = -lpsm2
-@EMBEDDED_FALSE@am__append_15 = -version-info 18:0:17
+@EMBEDDED_FALSE@am__append_15 = -version-info 19:0:18
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/fi_check_package.m4 \
@@ -184,6 +186,44 @@ am__installdirs = "$(DESTDIR)$(libfabric_pkglibdir)" \
 	"$(DESTDIR)$(bindir)" "$(DESTDIR)$(man7dir)" \
 	"$(DESTDIR)$(pkgconfigdir)"
 LTLIBRARIES = $(libfabric_pkglib_LTLIBRARIES) $(noinst_LTLIBRARIES)
+psm3_libhal_gen1_la_LIBADD =
+am__psm3_libhal_gen1_la_SOURCES_DIST = psm3/hal_gen1/gen1_types.h \
+	psm3/hal_gen1/gen1_hfi1_deprecated.h \
+	psm3/hal_gen1/gen1_common.h psm3/hal_gen1/gen1_i2cflash.c \
+	psm3/hal_gen1/gen1_proto.c psm3/hal_gen1/gen1_sdma.c \
+	psm3/hal_gen1/gen1_sdma.h psm3/hal_gen1/gen1_service.c \
+	psm3/hal_gen1/gen1_service.h psm3/hal_gen1/gen1_user.h \
+	psm3/hal_gen1/gen1_utils.c psm3/hal_gen1/gen1_gdrcpy.c \
+	psm3/hal_gen1/gen1_hal.c psm3/hal_gen1/gen1_hal.h \
+	psm3/hal_gen1/gen1_hal_inline_i.h \
+	psm3/hal_gen1/gen1_ptl_ips_subcontext.h \
+	psm3/hal_gen1/gen1_ptl_ips_writehdrq.h \
+	psm3/hal_gen1/gen1_ptl_ips.c \
+	psm3/hal_gen1/gen1_ptl_ips_expected.c \
+	psm3/hal_gen1/gen1_rcvthread.c psm3/hal_gen1/gen1_recvhdrq.c \
+	psm3/hal_gen1/gen1_spio.h
+am__dirstamp = $(am__leading_dot)dirstamp
+@HAVE_PSM3_SRC_TRUE@am_psm3_libhal_gen1_la_OBJECTS = psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_service.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo
+psm3_libhal_gen1_la_OBJECTS = $(am_psm3_libhal_gen1_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+psm3_libhal_gen1_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+@HAVE_PSM3_SRC_TRUE@am_psm3_libhal_gen1_la_rpath =
 psm3_libhal_sockets_la_LIBADD =
 am__psm3_libhal_sockets_la_SOURCES_DIST =  \
 	psm3/hal_sockets/sockets_ep.c psm3/hal_sockets/sockets_ep.h \
@@ -193,22 +233,19 @@ am__psm3_libhal_sockets_la_SOURCES_DIST =  \
 	psm3/hal_sockets/sockets_gdrcpy.c \
 	psm3/hal_sockets/sockets_hal.c psm3/hal_sockets/sockets_hal.h \
 	psm3/hal_sockets/sockets_hal_inline_i.h \
+	psm3/hal_sockets/sockets_proto.c \
 	psm3/hal_sockets/sockets_ptl_ips.c \
 	psm3/hal_sockets/sockets_rcvthread.c \
 	psm3/hal_sockets/sockets_recvhdrq.c
-am__dirstamp = $(am__leading_dot)dirstamp
 @HAVE_PSM3_SRC_TRUE@am_psm3_libhal_sockets_la_OBJECTS = psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_service.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_gdrcpy.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_hal.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_ptl_ips.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_rcvthread.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_recvhdrq.lo
 psm3_libhal_sockets_la_OBJECTS = $(am_psm3_libhal_sockets_la_OBJECTS)
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 psm3_libhal_sockets_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
@@ -244,12 +281,12 @@ am__psm3_libpsm3i_la_SOURCES_DIST = psm3/psm.c psm3/psm_am.c \
 	psm3/psm_log.h psm3/psm_memcpy.c psm3/psm_mock.c \
 	psm3/psm_mpool.c psm3/psm_mpool.h psm3/psm_mq.c \
 	psm3/psm_mq_internal.h psm3/psm_mq_recv.c psm3/psm_mq_utils.c \
-	psm3/psm_netutils.h psm3/psm_perf.c psm3/psm_perf.h \
-	psm3/psm_rndv_mod.c psm3/psm_rndv_mod.h psm3/psm_stats.c \
-	psm3/psm_stats.h psm3/psm_sysbuf.c psm3/psm_sysbuf.h \
-	psm3/psm_timer.c psm3/psm_timer.h psm3/psm_user.h \
-	psm3/psm_utils.c psm3/psm_utils.h psm3/psm_verbs_mr.c \
-	psm3/psm_verbs_mr.h psm3/psm_verbs_umrc.c \
+	psm3/psm_netutils.h psm3/psm_oneapi_ze.c psm3/psm_perf.c \
+	psm3/psm_perf.h psm3/psm_rndv_mod.c psm3/psm_rndv_mod.h \
+	psm3/psm_stats.c psm3/psm_stats.h psm3/psm_sysbuf.c \
+	psm3/psm_sysbuf.h psm3/psm_timer.c psm3/psm_timer.h \
+	psm3/psm_user.h psm3/psm_utils.c psm3/psm_utils.h \
+	psm3/psm_verbs_mr.c psm3/psm_verbs_mr.h psm3/psm_verbs_umrc.c \
 	psm3/psm_verbs_umrc.h psm3/psmi_wrappers.c \
 	psm3/psmi_wrappers.h psm3/psm2.h psm3/psm2_am.h \
 	psm3/psm2_hal.c psm3/psm2_hal_loopback.c psm3/psm2_hal.h \
@@ -269,6 +306,7 @@ am__psm3_libpsm3i_la_SOURCES_DIST = psm3/psm.c psm3/psm_am.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq_recv.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq_utils.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_oneapi_ze.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_perf.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_rndv_mod.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_stats.lo \
@@ -409,8 +447,9 @@ am__src_libpsm3_fi_la_SOURCES_DIST = inc/ofi_hmem.h inc/ofi.h \
 	src/psmx3_trx_ctxt.c src/psmx3_util.c src/psmx3_wait.c \
 	src/version.h shared/hmem.c shared/hmem_rocr.c \
 	shared/hmem_cuda.c shared/hmem_cuda_gdrcopy.c shared/hmem_ze.c \
-	shared/common.c shared/enosys.c shared/rbtree.c shared/tree.c \
-	shared/fasthash.c shared/indexer.c shared/mem.c shared/iov.c \
+	shared/hmem_neuron.c shared/common.c shared/enosys.c \
+	shared/rbtree.c shared/tree.c shared/fasthash.c \
+	shared/indexer.c shared/mem.c shared/iov.c \
 	shared/shared/ofi_str.c util/src/util_atomic.c \
 	util/src/util_attr.c util/src/util_av.c util/src/util_buf.c \
 	util/src/util_coll.c util/src/util_cq.c util/src/util_cntr.c \
@@ -437,6 +476,7 @@ am__objects_6 = shared/src_libpsm3_fi_la-hmem.lo \
 	shared/src_libpsm3_fi_la-hmem_cuda.lo \
 	shared/src_libpsm3_fi_la-hmem_cuda_gdrcopy.lo \
 	shared/src_libpsm3_fi_la-hmem_ze.lo \
+	shared/src_libpsm3_fi_la-hmem_neuron.lo \
 	shared/src_libpsm3_fi_la-common.lo \
 	shared/src_libpsm3_fi_la-enosys.lo \
 	shared/src_libpsm3_fi_la-rbtree.lo \
@@ -529,6 +569,7 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo \
+	psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo \
@@ -538,9 +579,21 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_umrc.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Plo \
+	psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo \
+	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ptl_ips.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_rcvthread.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_recvhdrq.Plo \
@@ -588,6 +641,7 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_rocr.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo \
@@ -662,14 +716,16 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(psm3_libhal_sockets_la_SOURCES) \
+SOURCES = $(psm3_libhal_gen1_la_SOURCES) \
+	$(psm3_libhal_sockets_la_SOURCES) \
 	$(psm3_libhal_verbs_la_SOURCES) $(psm3_libpsm3i_la_SOURCES) \
 	$(nodist_psm3_libpsm3i_la_SOURCES) \
 	$(psm3_libptl_am_la_SOURCES) $(psm3_libptl_ips_la_SOURCES) \
 	$(psm3_libptl_self_la_SOURCES) $(psm3_libutils_la_SOURCES) \
 	$(src_libpsm3_fi_la_SOURCES) \
 	$(nodist_src_libpsm3_fi_la_SOURCES)
-DIST_SOURCES = $(am__psm3_libhal_sockets_la_SOURCES_DIST) \
+DIST_SOURCES = $(am__psm3_libhal_gen1_la_SOURCES_DIST) \
+	$(am__psm3_libhal_sockets_la_SOURCES_DIST) \
 	$(am__psm3_libhal_verbs_la_SOURCES_DIST) \
 	$(am__psm3_libpsm3i_la_SOURCES_DIST) \
 	$(am__psm3_libptl_am_la_SOURCES_DIST) \
@@ -862,7 +918,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -871,6 +926,9 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+ze_CPPFLAGS = @ze_CPPFLAGS@
+ze_LDFLAGS = @ze_LDFLAGS@
+ze_LIBS = @ze_LIBS@
 
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
@@ -903,9 +961,10 @@ AM_CFLAGS = -Wall
 
 # internal utility functions shared by in-tree providers:
 common_srcs = shared/hmem.c shared/hmem_rocr.c shared/hmem_cuda.c \
-	shared/hmem_cuda_gdrcopy.c shared/hmem_ze.c shared/common.c \
-	shared/enosys.c shared/rbtree.c shared/tree.c \
-	shared/fasthash.c shared/indexer.c shared/mem.c shared/iov.c \
+	shared/hmem_cuda_gdrcopy.c shared/hmem_ze.c \
+	shared/hmem_neuron.c shared/common.c shared/enosys.c \
+	shared/rbtree.c shared/tree.c shared/fasthash.c \
+	shared/indexer.c shared/mem.c shared/iov.c \
 	shared/shared/ofi_str.c util/src/util_atomic.c \
 	util/src/util_attr.c util/src/util_av.c util/src/util_buf.c \
 	util/src/util_coll.c util/src/util_cq.c util/src/util_cntr.c \
@@ -1116,6 +1175,41 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@psm3_libutils_la_CFLAGS = \
 @HAVE_PSM3_SRC_TRUE@	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 
+
+#ifdef PSM_OPA
+@HAVE_PSM3_SRC_TRUE@psm3_libhal_gen1_la_SOURCES = \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_types.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_hfi1_deprecated.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_common.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_i2cflash.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_proto.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_sdma.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_sdma.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_service.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_service.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_user.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_utils.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_gdrcpy.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_hal.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_hal.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_hal_inline_i.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_ptl_ips_subcontext.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_ptl_ips_writehdrq.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_ptl_ips.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_ptl_ips_expected.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_rcvthread.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_recvhdrq.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_spio.h
+
+@HAVE_PSM3_SRC_TRUE@psm3_libhal_gen1_la_CPPFLAGS = \
+@HAVE_PSM3_SRC_TRUE@	-I$(top_srcdir)/psm3/hal_gen1/ \
+@HAVE_PSM3_SRC_TRUE@	$(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
+
+@HAVE_PSM3_SRC_TRUE@psm3_libhal_gen1_la_CFLAGS = \
+@HAVE_PSM3_SRC_TRUE@	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
+
+
+#endif PSM_OPA
 @HAVE_PSM3_SRC_TRUE@psm3_libhal_verbs_la_SOURCES = \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_verbs/verbs_ep.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_verbs/verbs_ep.h \
@@ -1147,6 +1241,7 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_hal.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_hal.h \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_hal_inline_i.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_proto.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_ptl_ips.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_rcvthread.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_recvhdrq.c
@@ -1183,6 +1278,7 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_mq_recv.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_mq_utils.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_netutils.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/psm_oneapi_ze.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_perf.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_perf.h \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_rndv_mod.c \
@@ -1228,6 +1324,7 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_am.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_ips.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_self.la \
+@HAVE_PSM3_SRC_TRUE@	psm3/libhal_gen1.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_verbs.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_sockets.la
 
@@ -1236,11 +1333,13 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_am.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_ips.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_self.la \
+@HAVE_PSM3_SRC_TRUE@	psm3/libhal_gen1.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_verbs.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_sockets.la
 
 @HAVE_PSM3_SRC_TRUE@_psm3_extra_dist = \
 @HAVE_PSM3_SRC_TRUE@	psm3/include/psm3_rbtree.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/hal_gen1/gen1_spio.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_verbs/verbs_spio.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/sockets_spio.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/utils/utils_dwordcpy-x86_64-fast.S
@@ -1365,6 +1464,51 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+psm3/hal_gen1/$(am__dirstamp):
+	@$(MKDIR_P) psm3/hal_gen1
+	@: > psm3/hal_gen1/$(am__dirstamp)
+psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) psm3/hal_gen1/$(DEPDIR)
+	@: > psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_service.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo:  \
+	psm3/hal_gen1/$(am__dirstamp) \
+	psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+psm3/$(am__dirstamp):
+	@$(MKDIR_P) psm3
+	@: > psm3/$(am__dirstamp)
+
+psm3/libhal_gen1.la: $(psm3_libhal_gen1_la_OBJECTS) $(psm3_libhal_gen1_la_DEPENDENCIES) $(EXTRA_psm3_libhal_gen1_la_DEPENDENCIES) psm3/$(am__dirstamp)
+	$(AM_V_CCLD)$(psm3_libhal_gen1_la_LINK) $(am_psm3_libhal_gen1_la_rpath) $(psm3_libhal_gen1_la_OBJECTS) $(psm3_libhal_gen1_la_LIBADD) $(LIBS)
 psm3/hal_sockets/$(am__dirstamp):
 	@$(MKDIR_P) psm3/hal_sockets
 	@: > psm3/hal_sockets/$(am__dirstamp)
@@ -1383,6 +1527,9 @@ psm3/hal_sockets/libhal_sockets_la-sockets_gdrcpy.lo:  \
 psm3/hal_sockets/libhal_sockets_la-sockets_hal.lo:  \
 	psm3/hal_sockets/$(am__dirstamp) \
 	psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
+psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo:  \
+	psm3/hal_sockets/$(am__dirstamp) \
+	psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
 psm3/hal_sockets/libhal_sockets_la-sockets_ptl_ips.lo:  \
 	psm3/hal_sockets/$(am__dirstamp) \
 	psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
@@ -1392,9 +1539,6 @@ psm3/hal_sockets/libhal_sockets_la-sockets_rcvthread.lo:  \
 psm3/hal_sockets/libhal_sockets_la-sockets_recvhdrq.lo:  \
 	psm3/hal_sockets/$(am__dirstamp) \
 	psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
-psm3/$(am__dirstamp):
-	@$(MKDIR_P) psm3
-	@: > psm3/$(am__dirstamp)
 
 psm3/libhal_sockets.la: $(psm3_libhal_sockets_la_OBJECTS) $(psm3_libhal_sockets_la_DEPENDENCIES) $(EXTRA_psm3_libhal_sockets_la_DEPENDENCIES) psm3/$(am__dirstamp)
 	$(AM_V_CCLD)$(psm3_libhal_sockets_la_LINK) $(am_psm3_libhal_sockets_la_rpath) $(psm3_libhal_sockets_la_OBJECTS) $(psm3_libhal_sockets_la_LIBADD) $(LIBS)
@@ -1456,6 +1600,8 @@ psm3/libpsm3i_la-psm_mq.lo: psm3/$(am__dirstamp) \
 psm3/libpsm3i_la-psm_mq_recv.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_mq_utils.lo: psm3/$(am__dirstamp) \
+	psm3/$(DEPDIR)/$(am__dirstamp)
+psm3/libpsm3i_la-psm_oneapi_ze.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_perf.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
@@ -1651,6 +1797,8 @@ shared/src_libpsm3_fi_la-hmem_cuda_gdrcopy.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-hmem_ze.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-hmem_neuron.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-common.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-enosys.lo: shared/$(am__dirstamp) \
@@ -1801,6 +1949,8 @@ mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f psm3/*.$(OBJEXT)
 	-rm -f psm3/*.lo
+	-rm -f psm3/hal_gen1/*.$(OBJEXT)
+	-rm -f psm3/hal_gen1/*.lo
 	-rm -f psm3/hal_sockets/*.$(OBJEXT)
 	-rm -f psm3/hal_sockets/*.lo
 	-rm -f psm3/hal_verbs/*.$(OBJEXT)
@@ -1846,6 +1996,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo@am__quote@ # am--include-marker
@@ -1855,9 +2006,21 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_umrc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ptl_ips.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_rcvthread.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_recvhdrq.Plo@am__quote@ # am--include-marker
@@ -1905,6 +2068,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_rocr.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo@am__quote@ # am--include-marker
@@ -1991,6 +2155,83 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
+psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo: psm3/hal_gen1/gen1_i2cflash.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo `test -f 'psm3/hal_gen1/gen1_i2cflash.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_i2cflash.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_i2cflash.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_i2cflash.lo `test -f 'psm3/hal_gen1/gen1_i2cflash.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_i2cflash.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo: psm3/hal_gen1/gen1_proto.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo `test -f 'psm3/hal_gen1/gen1_proto.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_proto.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_proto.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_proto.lo `test -f 'psm3/hal_gen1/gen1_proto.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_proto.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo: psm3/hal_gen1/gen1_sdma.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo `test -f 'psm3/hal_gen1/gen1_sdma.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_sdma.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_sdma.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_sdma.lo `test -f 'psm3/hal_gen1/gen1_sdma.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_sdma.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_service.lo: psm3/hal_gen1/gen1_service.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_service.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_service.lo `test -f 'psm3/hal_gen1/gen1_service.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_service.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_service.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_service.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_service.lo `test -f 'psm3/hal_gen1/gen1_service.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_service.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo: psm3/hal_gen1/gen1_utils.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo `test -f 'psm3/hal_gen1/gen1_utils.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_utils.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_utils.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_utils.lo `test -f 'psm3/hal_gen1/gen1_utils.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_utils.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo: psm3/hal_gen1/gen1_gdrcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo `test -f 'psm3/hal_gen1/gen1_gdrcpy.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_gdrcpy.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_gdrcpy.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_gdrcpy.lo `test -f 'psm3/hal_gen1/gen1_gdrcpy.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_gdrcpy.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo: psm3/hal_gen1/gen1_hal.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo `test -f 'psm3/hal_gen1/gen1_hal.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_hal.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_hal.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_hal.lo `test -f 'psm3/hal_gen1/gen1_hal.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_hal.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo: psm3/hal_gen1/gen1_ptl_ips.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo `test -f 'psm3/hal_gen1/gen1_ptl_ips.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_ptl_ips.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_ptl_ips.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips.lo `test -f 'psm3/hal_gen1/gen1_ptl_ips.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_ptl_ips.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo: psm3/hal_gen1/gen1_ptl_ips_expected.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo `test -f 'psm3/hal_gen1/gen1_ptl_ips_expected.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_ptl_ips_expected.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_ptl_ips_expected.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_ptl_ips_expected.lo `test -f 'psm3/hal_gen1/gen1_ptl_ips_expected.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_ptl_ips_expected.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo: psm3/hal_gen1/gen1_rcvthread.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo `test -f 'psm3/hal_gen1/gen1_rcvthread.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_rcvthread.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_rcvthread.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_rcvthread.lo `test -f 'psm3/hal_gen1/gen1_rcvthread.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_rcvthread.c
+
+psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo: psm3/hal_gen1/gen1_recvhdrq.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -MT psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo -MD -MP -MF psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Tpo -c -o psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo `test -f 'psm3/hal_gen1/gen1_recvhdrq.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_recvhdrq.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Tpo psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_gen1/gen1_recvhdrq.c' object='psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_gen1_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_gen1_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_gen1/libhal_gen1_la-gen1_recvhdrq.lo `test -f 'psm3/hal_gen1/gen1_recvhdrq.c' || echo '$(srcdir)/'`psm3/hal_gen1/gen1_recvhdrq.c
+
 psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo: psm3/hal_sockets/sockets_ep.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_sockets_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) -MT psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo -MD -MP -MF psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Tpo -c -o psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo `test -f 'psm3/hal_sockets/sockets_ep.c' || echo '$(srcdir)/'`psm3/hal_sockets/sockets_ep.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Tpo psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo
@@ -2018,6 +2259,13 @@ psm3/hal_sockets/libhal_sockets_la-sockets_hal.lo: psm3/hal_sockets/sockets_hal.
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_sockets/sockets_hal.c' object='psm3/hal_sockets/libhal_sockets_la-sockets_hal.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_sockets_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_sockets/libhal_sockets_la-sockets_hal.lo `test -f 'psm3/hal_sockets/sockets_hal.c' || echo '$(srcdir)/'`psm3/hal_sockets/sockets_hal.c
+
+psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo: psm3/hal_sockets/sockets_proto.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_sockets_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) -MT psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo -MD -MP -MF psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Tpo -c -o psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo `test -f 'psm3/hal_sockets/sockets_proto.c' || echo '$(srcdir)/'`psm3/hal_sockets/sockets_proto.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Tpo psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/hal_sockets/sockets_proto.c' object='psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_sockets_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) -c -o psm3/hal_sockets/libhal_sockets_la-sockets_proto.lo `test -f 'psm3/hal_sockets/sockets_proto.c' || echo '$(srcdir)/'`psm3/hal_sockets/sockets_proto.c
 
 psm3/hal_sockets/libhal_sockets_la-sockets_ptl_ips.lo: psm3/hal_sockets/sockets_ptl_ips.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_sockets_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) -MT psm3/hal_sockets/libhal_sockets_la-sockets_ptl_ips.lo -MD -MP -MF psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ptl_ips.Tpo -c -o psm3/hal_sockets/libhal_sockets_la-sockets_ptl_ips.lo `test -f 'psm3/hal_sockets/sockets_ptl_ips.c' || echo '$(srcdir)/'`psm3/hal_sockets/sockets_ptl_ips.c
@@ -2179,6 +2427,13 @@ psm3/libpsm3i_la-psm_mq_utils.lo: psm3/psm_mq_utils.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/psm_mq_utils.c' object='psm3/libpsm3i_la-psm_mq_utils.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm_mq_utils.lo `test -f 'psm3/psm_mq_utils.c' || echo '$(srcdir)/'`psm3/psm_mq_utils.c
+
+psm3/libpsm3i_la-psm_oneapi_ze.lo: psm3/psm_oneapi_ze.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -MT psm3/libpsm3i_la-psm_oneapi_ze.lo -MD -MP -MF psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Tpo -c -o psm3/libpsm3i_la-psm_oneapi_ze.lo `test -f 'psm3/psm_oneapi_ze.c' || echo '$(srcdir)/'`psm3/psm_oneapi_ze.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Tpo psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/psm_oneapi_ze.c' object='psm3/libpsm3i_la-psm_oneapi_ze.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm_oneapi_ze.lo `test -f 'psm3/psm_oneapi_ze.c' || echo '$(srcdir)/'`psm3/psm_oneapi_ze.c
 
 psm3/libpsm3i_la-psm_perf.lo: psm3/psm_perf.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -MT psm3/libpsm3i_la-psm_perf.lo -MD -MP -MF psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Tpo -c -o psm3/libpsm3i_la-psm_perf.lo `test -f 'psm3/psm_perf.c' || echo '$(srcdir)/'`psm3/psm_perf.c
@@ -2628,6 +2883,13 @@ shared/src_libpsm3_fi_la-hmem_ze.lo: shared/hmem_ze.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-hmem_ze.lo `test -f 'shared/hmem_ze.c' || echo '$(srcdir)/'`shared/hmem_ze.c
 
+shared/src_libpsm3_fi_la-hmem_neuron.lo: shared/hmem_neuron.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-hmem_neuron.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Tpo -c -o shared/src_libpsm3_fi_la-hmem_neuron.lo `test -f 'shared/hmem_neuron.c' || echo '$(srcdir)/'`shared/hmem_neuron.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/hmem_neuron.c' object='shared/src_libpsm3_fi_la-hmem_neuron.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-hmem_neuron.lo `test -f 'shared/hmem_neuron.c' || echo '$(srcdir)/'`shared/hmem_neuron.c
+
 shared/src_libpsm3_fi_la-common.lo: shared/common.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-common.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-common.Tpo -c -o shared/src_libpsm3_fi_la-common.lo `test -f 'shared/common.c' || echo '$(srcdir)/'`shared/common.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-common.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-common.Plo
@@ -2900,6 +3162,7 @@ mostlyclean-libtool:
 clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf psm3/.libs psm3/_libs
+	-rm -rf psm3/hal_gen1/.libs psm3/hal_gen1/_libs
 	-rm -rf psm3/hal_sockets/.libs psm3/hal_sockets/_libs
 	-rm -rf psm3/hal_verbs/.libs psm3/hal_verbs/_libs
 	-rm -rf psm3/ptl_am/.libs psm3/ptl_am/_libs
@@ -3246,6 +3509,8 @@ distclean-generic:
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f psm3/$(DEPDIR)/$(am__dirstamp)
 	-rm -f psm3/$(am__dirstamp)
+	-rm -f psm3/hal_gen1/$(DEPDIR)/$(am__dirstamp)
+	-rm -f psm3/hal_gen1/$(am__dirstamp)
 	-rm -f psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
 	-rm -f psm3/hal_sockets/$(am__dirstamp)
 	-rm -f psm3/hal_verbs/$(DEPDIR)/$(am__dirstamp)
@@ -3299,6 +3564,7 @@ distclean: distclean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo
+	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo
@@ -3308,9 +3574,21 @@ distclean: distclean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_umrc.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo
+	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ptl_ips.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_rcvthread.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_recvhdrq.Plo
@@ -3358,6 +3636,7 @@ distclean: distclean-am
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_rocr.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo
@@ -3476,6 +3755,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo
+	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo
@@ -3485,9 +3765,21 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_umrc.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_gdrcpy.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_hal.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_i2cflash.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_proto.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_ptl_ips_expected.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_rcvthread.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_recvhdrq.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_sdma.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_service.Plo
+	-rm -f psm3/hal_gen1/$(DEPDIR)/libhal_gen1_la-gen1_utils.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo
+	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_proto.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ptl_ips.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_rcvthread.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_recvhdrq.Plo
@@ -3535,6 +3827,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_neuron.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_rocr.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo

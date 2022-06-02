@@ -16,6 +16,12 @@
 /* Set to 1 to use c11 atomic `least` types */
 #undef HAVE_ATOMICS_LEAST_TYPES
 
+/* Ignore HAVE_BGQ */
+#undef HAVE_BGQ
+
+/* Ignore HAVE_BGQ_DL */
+#undef HAVE_BGQ_DL
+
 /* Set to 1 to use built-in intrincics atomics */
 #undef HAVE_BUILTIN_ATOMICS
 
@@ -27,6 +33,9 @@
 
 /* Set to 1 to use cpuid */
 #undef HAVE_CPUID
+
+/* CUDA support */
+#undef HAVE_CUDA
 
 /* Define to 1 if you have the <cuda_runtime.h> header file. */
 #undef HAVE_CUDA_RUNTIME_H
@@ -42,6 +51,18 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
+/* Ignore HAVE_DMABUF_PEER_MEM */
+#undef HAVE_DMABUF_PEER_MEM
+
+/* i915 DRM header */
+#undef HAVE_DRM
+
+/* Ignore HAVE_EFA */
+#undef HAVE_EFA
+
+/* Ignore HAVE_EFA_DL */
+#undef HAVE_EFA_DL
+
 /* Define to 1 if you have the <elf.h> header file. */
 #undef HAVE_ELF_H
 
@@ -54,14 +75,29 @@
 /* Set to 1 to use ethtool */
 #undef HAVE_ETHTOOL
 
+/* Ignore HAVE_GDRCOPY */
+#undef HAVE_GDRCOPY
+
 /* Define to 1 if you have the `getifaddrs' function. */
 #undef HAVE_GETIFADDRS
+
+/* Ignore HAVE_GNI */
+#undef HAVE_GNI
+
+/* Ignore HAVE_GNI_DL */
+#undef HAVE_GNI_DL
+
+/* Ignore HAVE_HOOK_DEBUG */
+#undef HAVE_HOOK_DEBUG
+
+/* Ignore HAVE_HOOK_HMEM */
+#undef HAVE_HOOK_HMEM
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
-/* Whether we have CUDA runtime or not */
-#undef HAVE_LIBCUDA
+/* Define to 1 if you have the <level_zero/ze_api.h> header file. */
+#undef HAVE_LEVEL_ZERO_ZE_API_H
 
 /* Define to 1 if you have the `dl' library (-ldl). */
 #undef HAVE_LIBDL
@@ -76,8 +112,38 @@
 /* Define to 1 if you have the <linux/userfaultfd.h> header file. */
 #undef HAVE_LINUX_USERFAULTFD_H
 
+/* Ignore HAVE_MEMHOOKS_MONITOR */
+#undef HAVE_MEMHOOKS_MONITOR
+
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
+
+/* Ignore HAVE_MRAIL */
+#undef HAVE_MRAIL
+
+/* Ignore HAVE_MRAIL_DL */
+#undef HAVE_MRAIL_DL
+
+/* Ignore HAVE_NEURON */
+#undef HAVE_NEURON
+
+/* Ignore HAVE_OPX */
+#undef HAVE_OPX
+
+/* Ignore HAVE_OPX_DL */
+#undef HAVE_OPX_DL
+
+/* Ignore HAVE_PERF */
+#undef HAVE_PERF
+
+/* Ignore HAVE_PSM */
+#undef HAVE_PSM
+
+/* Ignore HAVE_PSM2 */
+#undef HAVE_PSM2
+
+/* Ignore HAVE_PSM2_DL */
+#undef HAVE_PSM2_DL
 
 /* Build libfabric PSM3 provider */
 #undef HAVE_PSM3
@@ -88,11 +154,44 @@
 /* PSM3 source is built-in */
 #undef HAVE_PSM3_SRC
 
+/* Ignore HAVE_PSM_DL */
+#undef HAVE_PSM_DL
+
 /* Define to 1 if you have the <rdma/rv_user_ioctls.h> header file. */
 #undef HAVE_RDMA_RV_USER_IOCTLS_H
 
-/* Define to 1 if you have the <rv/rv_user_ioctls.h> header file. */
-#undef HAVE_RV_RV_USER_IOCTLS_H
+/* Ignore HAVE_ROCR */
+#undef HAVE_ROCR
+
+/* Ignore HAVE_RSTREAM */
+#undef HAVE_RSTREAM
+
+/* Ignore HAVE_RSTREAM_DL */
+#undef HAVE_RSTREAM_DL
+
+/* Ignore HAVE_RXD */
+#undef HAVE_RXD
+
+/* Ignore HAVE_RXD_DL */
+#undef HAVE_RXD_DL
+
+/* Ignore HAVE_RXM */
+#undef HAVE_RXM
+
+/* Ignore HAVE_RXM_DL */
+#undef HAVE_RXM_DL
+
+/* Ignore HAVE_SHM */
+#undef HAVE_SHM
+
+/* Ignore HAVE_SHM_DL */
+#undef HAVE_SHM_DL
+
+/* Ignore HAVE_SOCKETS */
+#undef HAVE_SOCKETS
+
+/* Ignore HAVE_SOCKETS_DL */
+#undef HAVE_SOCKETS_DL
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -118,14 +217,44 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
 
+/* Ignore HAVE_TCP */
+#undef HAVE_TCP
+
+/* Ignore HAVE_TCP_DL */
+#undef HAVE_TCP_DL
+
 /* Define to 1 if typeof works with your compiler. */
 #undef HAVE_TYPEOF
+
+/* Ignore HAVE_UDP */
+#undef HAVE_UDP
+
+/* Ignore HAVE_UDP_DL */
+#undef HAVE_UDP_DL
+
+/* Ignore HAVE_UFFD_MONITOR */
+#undef HAVE_UFFD_MONITOR
 
 /* Define to 1 if platform supports userfault fd unmap */
 #undef HAVE_UFFD_UNMAP
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
+
+/* Ignore HAVE_USNIC */
+#undef HAVE_USNIC
+
+/* Ignore HAVE_USNIC_DL */
+#undef HAVE_USNIC_DL
+
+/* Ignore HAVE_VERBS */
+#undef HAVE_VERBS
+
+/* Ignore HAVE_VERBS_DL */
+#undef HAVE_VERBS_DL
+
+/* ZE support */
+#undef HAVE_ZE
 
 /* Define to 1 to enable valgrind annotations */
 #undef INCLUDE_VALGRIND
@@ -154,8 +283,11 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
-/* Whether we have CUDA runtime or not */
+/* CUDA support */
 #undef PSM3_CUDA
+
+/* ZE support */
+#undef PSM3_ONEAPI
 
 /* Define to 1 if pthread_spin_init is available. */
 #undef PT_LOCK_SPIN

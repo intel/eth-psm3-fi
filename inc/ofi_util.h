@@ -49,6 +49,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_ext.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
@@ -87,6 +88,12 @@ extern "C" {
 
 /* Memory registration should not be cached */
 #define OFI_MR_NOCACHE		BIT_ULL(60)
+
+/* Provider domain flags
+ * SPINLOCK: Use spinlocks for domain and CQ objects.
+ *           EP is not included (not needed yet)
+ */
+#define OFI_DOMAIN_SPINLOCK	BIT_ULL(61)
 
 #define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
 	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
@@ -160,9 +167,13 @@ struct ofi_common_locks {
 /*
  * Provider details
  */
-typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
-				const struct fi_info *base_info,
-				struct fi_info *dest_info);
+typedef int (*ofi_map_info_t)(uint32_t version, const struct fi_info *src_info,
+			      const struct fi_info *base_info,
+			      struct fi_info *dest_info);
+typedef void (*ofi_alter_info_t)(uint32_t version,
+				 const struct fi_info *hints,
+				 const struct fi_info *base_info,
+				 struct fi_info *dest_info);
 
 struct util_prov {
 	const struct fi_provider	*prov;
@@ -183,7 +194,7 @@ struct util_fabric_info {
 struct util_fabric {
 	struct fid_fabric	fabric_fid;
 	struct dlist_entry	list_entry;
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const char		*name;
 	const struct fi_provider *prov;
@@ -206,7 +217,8 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
-	fastlock_t		lock;
+
+	struct ofi_genlock	lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
@@ -222,7 +234,7 @@ struct util_domain {
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
-		     struct util_domain *domain, void *context);
+		     struct util_domain *domain, void *context, uint64_t flags);
 int ofi_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int ofi_domain_close(struct util_domain *domain);
 
@@ -306,9 +318,9 @@ struct util_ep {
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
-	fastlock_t		lock;
-	ofi_fastlock_acquire_t	lock_acquire;
-	ofi_fastlock_release_t	lock_release;
+	ofi_mutex_t		lock;
+	ofi_mutex_lock_t	lock_acquire;
+	ofi_mutex_unlock_t	lock_release;
 
 	struct bitmask		*coll_cid_mask;
 	struct slist		coll_ready_queue;
@@ -344,8 +356,8 @@ static inline void ofi_ep_lock_release(struct util_ep *ep)
 
 static inline bool ofi_ep_lock_held(struct util_ep *ep)
 {
-	return (ep->lock_acquire == ofi_fastlock_acquire_noop) ||
-		fastlock_held(&ep->lock);
+	return (ep->lock_acquire == ofi_mutex_lock_noop) ||
+		ofi_mutex_held(&ep->lock);
 }
 
 static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
@@ -428,7 +440,7 @@ struct util_wait {
 	fi_wait_try_func	wait_try;
 
 	struct dlist_entry	fid_list;
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 };
 
 int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
@@ -481,7 +493,7 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid);
 struct util_wait_yield {
 	struct util_wait	util_wait;
 	int			signal;
-	fastlock_t		signal_lock;
+	ofi_mutex_t		signal_lock;
 };
 
 int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
@@ -516,10 +528,8 @@ struct util_cq {
 	struct util_wait	*wait;
 	ofi_atomic32_t		ref;
 	struct dlist_entry	ep_list;
-	fastlock_t		ep_list_lock;
-	fastlock_t		cq_lock;
-	ofi_fastlock_acquire_t	cq_fastlock_acquire;
-	ofi_fastlock_release_t	cq_fastlock_release;
+	ofi_mutex_t		ep_list_lock;
+	struct ofi_genlock	cq_lock;
 
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
@@ -589,7 +599,7 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 {
 	int ret;
 
-	cq->cq_fastlock_acquire(&cq->cq_lock);
+	ofi_genlock_lock(&cq->cq_lock);
 	if (ofi_cirque_freecnt(cq->cirq) > 1) {
 		ofi_cq_write_entry(cq, context, flags, len, buf, data, tag);
 		ret = 0;
@@ -597,7 +607,7 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		ret = ofi_cq_write_overflow(cq, context, flags, len,
 					    buf, data, tag, FI_ADDR_NOTAVAIL);
 	}
-	cq->cq_fastlock_release(&cq->cq_lock);
+	ofi_genlock_unlock(&cq->cq_lock);
 	return ret;
 }
 
@@ -607,7 +617,7 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 {
 	int ret;
 
-	cq->cq_fastlock_acquire(&cq->cq_lock);
+	ofi_genlock_lock(&cq->cq_lock);
 	if (ofi_cirque_freecnt(cq->cirq) > 1) {
 		ofi_cq_write_src_entry(cq, context, flags, len, buf, data,
 				       tag, src);
@@ -616,7 +626,7 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		ret = ofi_cq_write_overflow(cq, context, flags, len,
 					    buf, data, tag, src);
 	}
-	cq->cq_fastlock_release(&cq->cq_lock);
+	ofi_genlock_unlock(&cq->cq_lock);
 	return ret;
 }
 
@@ -667,17 +677,20 @@ struct util_cntr {
 	uint64_t		checkpoint_err;
 
 	struct dlist_entry	ep_list;
-	fastlock_t		ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 
 	int			internal_wait;
 	ofi_cntr_progress_func	progress;
 };
+
+#define OFI_TIMEOUT_QUANTUM_MS 50
 
 void ofi_cntr_progress(struct util_cntr *cntr);
 int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
+
 static inline void util_cntr_signal(struct util_cntr *cntr)
 {
 	assert(cntr->wait);
@@ -698,6 +711,29 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
  * AV / addressing
  */
 
+struct util_av;
+struct util_av_set;
+
+struct util_coll_mc {
+	struct fid_mc		mc_fid;
+	struct util_av_set	*av_set;
+	uint64_t		local_rank;
+	uint16_t		group_id;
+	uint16_t		seq;
+	ofi_atomic32_t		ref;
+};
+
+struct util_av_set {
+	struct fid_av_set	av_set_fid;
+	struct util_av		*av;
+	fi_addr_t		*fi_addr_array;
+	size_t			fi_addr_count;
+	uint64_t		flags;
+	struct util_coll_mc     coll_mc;
+	ofi_atomic32_t		ref;
+	ofi_mutex_t		lock;
+};
+
 struct util_av_entry {
 	ofi_atomic32_t	use_cnt;
 	UT_hash_handle	hh;
@@ -715,13 +751,13 @@ struct util_av {
 	struct util_domain	*domain;
 	struct util_eq		*eq;
 	ofi_atomic32_t		ref;
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 	const struct fi_provider *prov;
 
 	struct util_av_entry	*hash;
 	struct ofi_bufpool	*av_entry_pool;
 
-	struct util_coll_mc	*coll_mc;
+	struct util_av_set	*av_set;
 	void			*context;
 	uint64_t		flags;
 	size_t			addrlen;
@@ -731,7 +767,7 @@ struct util_av {
 	 */
 	size_t			context_offset;
 	struct dlist_entry	ep_list;
-	fastlock_t		ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 };
 
 struct util_av_attr {
@@ -761,7 +797,6 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr);
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr);
-int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg);
 int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
 void ofi_av_write_event(struct util_av *av, uint64_t data,
 			int err, void *context);
@@ -810,7 +845,7 @@ struct util_poll {
 	struct fid_poll		poll_fid;
 	struct util_domain	*domain;
 	struct dlist_entry	fid_list;
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 };
@@ -827,7 +862,7 @@ struct util_eq {
 	struct fid_eq		eq_fid;
 	struct util_fabric	*fabric;
 	struct util_wait	*wait;
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
@@ -867,27 +902,7 @@ ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
 const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 			    const void *err_data, char *buf, size_t len);
 
-/*
-
-#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |\
-				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
- * Attributes and capabilities
- */
-#define FI_PRIMARY_CAPS	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_MULTICAST | \
-			 FI_NAMED_RX_CTX | FI_DIRECTED_RECV | \
-			 FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
-			 FI_REMOTE_READ | FI_REMOTE_WRITE | FI_COLLECTIVE | \
-			 FI_HMEM)
-
-#define FI_SECONDARY_CAPS (FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
-			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
-			   FI_LOCAL_COMM | FI_REMOTE_COMM)
-
-#define OFI_TX_MSG_CAPS (FI_MSG | FI_SEND)
-#define OFI_RX_MSG_CAPS (FI_MSG | FI_RECV)
-#define OFI_TX_RMA_CAPS (FI_RMA | FI_READ | FI_WRITE)
-#define OFI_RX_RMA_CAPS (FI_RMA | FI_REMOTE_READ | FI_REMOTE_WRITE)
-
+int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format);
 int ofi_check_ep_type(const struct fi_provider *prov,
 		      const struct fi_ep_attr *prov_attr,
 		      const struct fi_ep_attr *user_attr);
@@ -949,10 +964,11 @@ struct fid_list_entry {
 	struct fid		*fid;
 };
 
-int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
+int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		    struct fid *fid);
-void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
+void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		     struct fid *fid);
+
 
 void ofi_fabric_insert(struct util_fabric *fabric);
 void ofi_fabric_remove(struct util_fabric *fabric);
@@ -973,12 +989,12 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
 		      const struct fi_info *util_hints,
 		      const struct fi_info *base_attr,
-		      ofi_alter_info_t info_to_core,
+		      ofi_map_info_t info_to_core,
 		      struct fi_info **core_info);
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
-		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
-		 ofi_alter_info_t info_to_util, struct fi_info **info);
+		 const struct fi_info *hints, ofi_map_info_t info_to_core,
+		 ofi_map_info_t info_to_util, struct fi_info **info);
 int ofi_get_core_info_fabric(const struct fi_provider *prov,
 			     const struct fi_fabric_attr *util_attr,
 			     struct fi_info **core_info);
@@ -1043,9 +1059,9 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 
 struct ofi_ops_flow_ctrl {
 	size_t	size;
-	void	(*set_threshold)(struct fid_ep *ep, uint64_t threshold);
+	bool	(*available)(struct fid_ep *ep);
+	int	(*enable)(struct fid_ep *ep, uint64_t threshold);
 	void	(*add_credits)(struct fid_ep *ep, uint64_t credits);
-	int	(*enable)(struct fid_ep *ep);
 	void	(*set_send_handler)(struct fid_domain *domain,
 			ssize_t (*send_handler)(struct fid_ep *ep, uint64_t credits));
 };
@@ -1069,6 +1085,11 @@ struct ofi_ops_dynamic_rbuf {
 	ssize_t	(*get_rbuf)(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			    size_t *count);
 };
+
+enum {
+	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
+};
+
 
 #ifdef __cplusplus
 }

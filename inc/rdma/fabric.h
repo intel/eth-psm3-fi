@@ -79,7 +79,7 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 14
+#define FI_MINOR_VERSION 15
 #define FI_REVISION_VERSION 0
 
 enum {
@@ -91,14 +91,8 @@ enum {
 #define FI_VERSION(major, minor) (((major) << 16) | (minor))
 #define FI_MAJOR(version)	(version >> 16)
 #define FI_MINOR(version)	(version & 0xFFFF)
-#define FI_VERSION_GE(v1, v2)   ((FI_MAJOR(v1) > FI_MAJOR(v2)) || \
-				 (FI_MAJOR(v1) == FI_MAJOR(v2) && \
-				  FI_MINOR(v1) == FI_MINOR(v2)) || \
-				 (FI_MAJOR(v1) == FI_MAJOR(v2) && \
-				  FI_MINOR(v1) > FI_MINOR(v2)))
-#define FI_VERSION_LT(v1, v2)	((FI_MAJOR(v1) < FI_MAJOR(v2)) || \
-				 (FI_MAJOR(v1) == FI_MAJOR(v2) && \
-				  FI_MINOR(v1) < FI_MINOR(v2)))
+#define FI_VERSION_GE(v1, v2)	(v1 >= v2)
+#define FI_VERSION_LT(v1, v2)	(v1 < v2)
 
 uint32_t fi_version(void);
 
@@ -166,6 +160,7 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
+#define FI_XPU_TRIGGER		(1ULL << 44)
 #define FI_HMEM_HOST_ALLOC	(1ULL << 45)
 #define FI_HMEM_DEVICE_ONLY	(1ULL << 46)
 #define FI_HMEM			(1ULL << 47)
@@ -211,6 +206,7 @@ enum {
 	FI_ADDR_IB_UD,		/* uint64_t[4] */
 	FI_ADDR_EFA,
 	FI_ADDR_PSMX3,		/* uint64_t[4] */
+	FI_ADDR_OPX,
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -308,7 +304,7 @@ enum {
 	FI_PROTO_UDP,
 	FI_PROTO_SOCK_TCP,
 	/*  MXM provider is deprecated.
-	 *  We will keep  this value in order to save binary compatibility.
+	 *  We will keep this value in order to save binary compatibility.
 	 */
 	FI_PROTO_MXM,
 	FI_PROTO_IWARP_RDM,
@@ -324,7 +320,9 @@ enum {
 	FI_PROTO_RSTREAM,
 	FI_PROTO_RDMA_CM_IB_XRC,
 	FI_PROTO_EFA,
-	FI_PROTO_PSMX3
+	FI_PROTO_PSMX3,
+	FI_PROTO_RXM_TCP,
+	FI_PROTO_OPX,
 };
 
 enum {

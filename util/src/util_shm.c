@@ -185,6 +185,11 @@ err:
 	return -FI_EBUSY;
 }
 
+static void smr_lock_init(pthread_spinlock_t *lock)
+{
+	pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
+}
+
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region *volatile *smr)
@@ -256,7 +261,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	pthread_mutex_unlock(&ep_list_lock);
 
 	*smr = mapped_addr;
-	fastlock_init(&(*smr)->lock);
+	smr_lock_init(&(*smr)->lock);
 	ofi_atomic_initialize32(&(*smr)->signal, 0);
 
 	(*smr)->map = map;
@@ -337,7 +342,7 @@ int smr_map_create(const struct fi_provider *prov, int peer_count,
 	}
 
 	ofi_rbmap_init(&(*map)->rbmap, smr_name_compare);
-	fastlock_init(&(*map)->lock);
+	ofi_spin_init(&(*map)->lock);
 
 	return 0;
 }
@@ -466,13 +471,13 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	struct ofi_rbnode *node;
 	int tries = 0, ret = 0;
 
-	fastlock_acquire(&map->lock);
+	ofi_spin_lock(&map->lock);
 	ret = ofi_rbmap_insert(&map->rbmap, (void *) name,
 			       (void *) (intptr_t) *id, &node);
 	if (ret) {
 		assert(ret == -FI_EALREADY);
 		*id = (intptr_t) node->data;
-		fastlock_release(&map->lock);
+		ofi_spin_unlock(&map->lock);
 		return 0;
 	}
 
@@ -493,7 +498,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	if (!ret)
 		map->peers[*id].peer.id = *id;
 
-	fastlock_release(&map->lock);
+	ofi_spin_unlock(&map->lock);
 	return ret == -ENOENT ? 0 : ret;
 }
 
@@ -509,7 +514,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 				       smr_no_prefix(map->peers[id].peer.name));
 	pthread_mutex_unlock(&ep_list_lock);
 
-	fastlock_acquire(&map->lock);
+	ofi_spin_lock(&map->lock);
 	if (!entry)
 		munmap(map->peers[id].region, map->peers[id].region->total_size);
 
@@ -519,7 +524,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	map->peers[id].fiaddr = FI_ADDR_UNSPEC;
 	map->peers[id].peer.id = -1;
 
-	fastlock_release(&map->lock);
+	ofi_spin_unlock(&map->lock);
 }
 
 void smr_map_free(struct smr_map *map)

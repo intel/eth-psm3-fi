@@ -102,6 +102,13 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ze_hmem_get_base_addr,
 		.is_ipc_enabled = ze_hmem_p2p_enabled,
 	},
+	[FI_HMEM_NEURON] = {
+		.initialized = false,
+		.init = neuron_hmem_init,
+		.cleanup = neuron_hmem_cleanup,
+		.copy_to_hmem = neuron_copy_to_dev,
+		.copy_from_hmem = neuron_copy_from_dev,
+	},
 };
 
 static inline int ofi_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
@@ -250,7 +257,8 @@ void ofi_hmem_cleanup(void)
 	}
 }
 
-enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
+				      uint64_t *flags)
 {
 	int iface;
 
@@ -261,7 +269,7 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 	for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
 	     iface--) {
 		if (ofi_hmem_is_initialized(iface) &&
-		    hmem_ops[iface].is_addr_valid(addr, NULL, NULL))
+		    hmem_ops[iface].is_addr_valid(addr, device, flags))
 			return iface;
 	}
 

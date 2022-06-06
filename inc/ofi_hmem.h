@@ -43,7 +43,7 @@
 
 extern bool ofi_hmem_disable_p2p;
 
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -57,10 +57,12 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
 cudaError_t ofi_cudaHostUnregister(void *ptr);
+cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
+cudaError_t ofi_cudaFree(void *ptr);
 
-#endif /* HAVE_LIBCUDA */
+#endif /* HAVE_CUDA */
 
-#ifdef HAVE_ROCR
+#if HAVE_ROCR
 
 #include <hsa/hsa_ext_amd.h>
 
@@ -144,7 +146,7 @@ int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 
-#define ZE_MAX_DEVICES 4
+#define ZE_MAX_DEVICES 8
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
@@ -160,6 +162,13 @@ bool ze_hmem_p2p_enabled(void);
 int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
+
+int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
+int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int neuron_hmem_init(void);
+int neuron_hmem_cleanup(void);
+void *neuron_alloc(void **handle, size_t size);
+void neuron_free(void **handle);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
@@ -238,7 +247,8 @@ bool ofi_hmem_is_initialized(enum fi_hmem_iface iface);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
-enum fi_hmem_iface ofi_get_hmem_iface(const void *addr);
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
+				      uint64_t *flags);
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);

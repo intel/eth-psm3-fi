@@ -40,7 +40,7 @@
 #define OFI_RMA_DIRECTION_CAPS	(FI_READ | FI_WRITE | \
 				 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
+int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC || prov_format == FI_FORMAT_UNSPEC)
 		return 1;
@@ -94,7 +94,7 @@ char *ofi_strdup_append(const char *head, const char *tail)
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
 {
 	char *exclude, *name, *temp;
-	int length;
+	size_t length;
 
 	length = strlen(util_prov_name) + 2;
 	exclude = malloc(length);
@@ -176,15 +176,17 @@ static int ofi_set_prov_name(const struct fi_provider *prov,
 static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    const struct fi_info *util_hints,
 			    const struct fi_info *base_attr,
-			    ofi_alter_info_t info_to_core,
+			    ofi_map_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
-	int ret = -FI_ENOMEM;
+	int ret;
 
-	if (!(*core_hints = fi_allocinfo()))
+	*core_hints = fi_allocinfo();
+	if (!*core_hints)
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_hints, base_attr, *core_hints))
+	ret = info_to_core(version, util_hints, base_attr, *core_hints);
+	if (ret)
 		goto err;
 
 	if (!util_hints)
@@ -227,11 +229,13 @@ err:
 }
 
 static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
-			    struct fi_info *core_info, const struct fi_info *base_info,
-			    ofi_alter_info_t info_to_util,
+			    struct fi_info *core_info,
+			    const struct fi_info *base_info,
+			    ofi_map_info_t info_to_util,
 			    struct fi_info **util_info)
 {
-	if (!(*util_info = fi_allocinfo()))
+	*util_info = fi_allocinfo();
+	if (!*util_info)
 		return -FI_ENOMEM;
 
 	if (info_to_util(version, core_info, base_info, *util_info))
@@ -283,7 +287,7 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
 		      const struct fi_info *util_hints,
 		      const struct fi_info *base_attr,
-		      ofi_alter_info_t info_to_core, struct fi_info **core_info)
+		      ofi_map_info_t info_to_core, struct fi_info **core_info)
 {
 	struct fi_info *core_hints = NULL;
 	int ret;
@@ -293,12 +297,12 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	FI_DBG(util_prov->prov, FI_LOG_CORE, "--- Begin ofi_get_core_info ---\n");
+	log_prefix = util_prov->prov->name;
 
 	ret = fi_getinfo(version, node, service, flags | OFI_CORE_PROV_ONLY,
 			 core_hints, core_info);
 
-	FI_DBG(util_prov->prov, FI_LOG_CORE, "--- End ofi_get_core_info ---\n");
+	log_prefix = "";
 
 	fi_freeinfo(core_hints);
 	return ret;
@@ -306,8 +310,8 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
-		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
-		 ofi_alter_info_t info_to_util, struct fi_info **info)
+		 const struct fi_info *hints, ofi_map_info_t info_to_core,
+		 ofi_map_info_t info_to_util, struct fi_info **info)
 {
 	struct fi_info *core_info, *base_info, *util_info, *cur, *tail;
 	int ret = -FI_ENODATA;
@@ -362,7 +366,8 @@ int ofi_get_core_info_fabric(const struct fi_provider *prov,
 		return -FI_ENODATA;
 
 	memset(&hints, 0, sizeof hints);
-	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr))))
+	hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr));
+	if (!hints.fabric_attr)
 		return -FI_ENOMEM;
 
 	hints.fabric_attr->prov_name = strdup(util_attr->prov_name);
@@ -377,7 +382,7 @@ int ofi_get_core_info_fabric(const struct fi_provider *prov,
 
 	hints.fabric_attr->name = util_attr->name;
 	hints.fabric_attr->api_version = util_attr->api_version;
-	hints.mode = ~0;
+	hints.mode = ~0ULL;
 
 	ret = fi_getinfo(util_attr->api_version, NULL, NULL, OFI_CORE_PROV_ONLY,
 	                 &hints, core_info);
@@ -398,10 +403,10 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 	 * user's hints, if one is specified.
 	 */
 	if (prov_attr->prov_name && user_attr->prov_name &&
-	    strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
+	    !strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
 		FI_INFO(prov, FI_LOG_CORE,
 			"Requesting provider %s, skipping %s\n",
-			prov_attr->prov_name, user_attr->prov_name);
+			user_attr->prov_name, prov_attr->prov_name);
 		return -FI_ENODATA;
 	}
 
@@ -1000,15 +1005,15 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 	    	if (ret)
 			continue;
 
-		if (!(fi = fi_dupinfo(prov_info))) {
+		fi = fi_dupinfo(prov_info);
+		if (!fi) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}
 
 		if (util_prov->alter_defaults) {
-			ret = util_prov->alter_defaults(api_version, user_info,
-							prov_info, fi);
-			assert(ret == FI_SUCCESS);
+			util_prov->alter_defaults(api_version, user_info,
+						  prov_info, fi);
 		}
 
 		if (!*info)
@@ -1061,7 +1066,7 @@ int ofi_check_info(const struct util_prov *util_prov,
 		return -FI_ENODATA;
 	}
 
-	if (!fi_valid_addr_format(prov_info->addr_format,
+	if (!ofi_valid_addr_format(prov_info->addr_format,
 				  user_info->addr_format)) {
 		FI_INFO(prov, FI_LOG_CORE, "address format not supported\n");
 		OFI_INFO_CHECK(prov, prov_info, user_info, addr_format,
@@ -1113,11 +1118,11 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 	uint64_t caps;
 
 	if (!hint_caps) {
-		caps = (info_caps & attr_caps & FI_PRIMARY_CAPS) |
-		       (attr_caps & FI_SECONDARY_CAPS);
+		caps = (info_caps & attr_caps & OFI_PRIMARY_CAPS) |
+		       (attr_caps & OFI_SECONDARY_CAPS);
 	} else {
-		caps = (hint_caps & FI_PRIMARY_CAPS) |
-		       (attr_caps & FI_SECONDARY_CAPS);
+		caps = (hint_caps & OFI_PRIMARY_CAPS) |
+		       (attr_caps & OFI_SECONDARY_CAPS);
 	}
 
 	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_DIRECTION_CAPS))

@@ -78,6 +78,7 @@ enum {
 	smr_src_mmap,	/* mmap-based fallback protocol */
 	smr_src_sar,	/* segmentation fallback protocol */
 	smr_src_ipc,	/* device IPC handle protocol */
+	smr_src_max,
 };
 
 //reserves 0-255 for defined ops and room for new ops
@@ -126,7 +127,6 @@ struct smr_msg_hdr {
 } __attribute__ ((aligned(16)));
 
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
-#define SMR_COMP_DATA_LEN	(SMR_MSG_DATA_LEN / 2)
 
 #define IPC_HANDLE_SIZE		64
 struct smr_ipc_info {
@@ -147,10 +147,6 @@ union smr_cmd_data {
 		size_t		iov_count;
 		struct iovec	iov[(SMR_MSG_DATA_LEN - sizeof(size_t)) /
 				    sizeof(struct iovec)];
-	};
-	struct {
-		uint8_t		buf[SMR_COMP_DATA_LEN];
-		uint8_t		comp[SMR_COMP_DATA_LEN];
 	};
 	struct {
 		uint64_t	sar;
@@ -228,7 +224,7 @@ struct smr_peer {
 #define SMR_MAX_PEERS	256
 
 struct smr_map {
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	int64_t			cur_id;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];
@@ -242,7 +238,7 @@ struct smr_region {
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
 	void		*base_addr;
-	fastlock_t	lock; /* lock for shm access
+	pthread_spinlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
 				 in order to progress or post recv */
 	ofi_atomic32_t	signal;

@@ -73,7 +73,7 @@ enum gdrcopy_dir {
 static gdr_t global_gdr;
 static pthread_spinlock_t global_gdr_lock;
 
-#ifdef ENABLE_GDRCOPY_DLOPEN
+#if ENABLE_GDRCOPY_DLOPEN
 
 #include <dlfcn.h>
 
@@ -269,8 +269,9 @@ void cuda_gdrcopy_impl(uint64_t handle, void *devptr,
 	} else {
 		assert(dir == GDRCOPY_FROM_DEVICE);
 		global_gdrcopy_ops.gdr_copy_from_mapping(gdrcopy->mh,
+							 hostptr,
 							 gdrcopy_user_ptr,
-							 hostptr, len);
+							 len);
 	}
 }
 

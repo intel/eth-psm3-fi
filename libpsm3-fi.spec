@@ -4,7 +4,7 @@
 
 Name: lib%{provider}-fi
 Version: 11.3.0.0
-Release: 999
+Release: 130
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries

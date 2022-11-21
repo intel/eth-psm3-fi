@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,12 +45,16 @@
 #ifdef __GNUC__
 #define FI_DEPRECATED_FUNC __attribute__((deprecated))
 #define FI_DEPRECATED_FIELD __attribute__((deprecated))
+#define FI_FORMAT_PRINTF(string, first) \
+	__attribute__ ((__format__ (__printf__, (string), (first))))
 #elif defined(_MSC_VER)
 #define FI_DEPRECATED_FUNC __declspec(deprecated)
 #define FI_DEPRECATED_FIELD
+#define FI_FORMAT_PRINTF(string, first)
 #else
 #define FI_DEPRECATED_FUNC
 #define FI_DEPRECATED_FIELD
+#define FI_FORMAT_PRINTF(string, first)
 #endif
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -79,7 +84,7 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 15
+#define FI_MINOR_VERSION 16
 #define FI_REVISION_VERSION 0
 
 enum {
@@ -160,6 +165,9 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
+#define FI_AV_USER_ID		(1ULL << 41)
+#define FI_PEER_SRX		(1ULL << 42)
+#define FI_PEER_CQ		(1ULL << 43)
 #define FI_XPU_TRIGGER		(1ULL << 44)
 #define FI_HMEM_HOST_ALLOC	(1ULL << 45)
 #define FI_HMEM_DEVICE_ONLY	(1ULL << 46)
@@ -207,6 +215,7 @@ enum {
 	FI_ADDR_EFA,
 	FI_ADDR_PSMX3,		/* uint64_t[4] */
 	FI_ADDR_OPX,
+	FI_ADDR_CXI,
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -323,6 +332,8 @@ enum {
 	FI_PROTO_PSMX3,
 	FI_PROTO_RXM_TCP,
 	FI_PROTO_OPX,
+	FI_PROTO_CXI,
+	FI_PROTO_XNET,
 };
 
 enum {
@@ -522,6 +533,9 @@ enum {
 	FI_CLASS_AV_SET,
 	FI_CLASS_MR_CACHE,
 	FI_CLASS_MEM_MONITOR,
+	FI_CLASS_PEER_CQ,
+	FI_CLASS_PEER_SRX,
+	FI_CLASS_LOG,
 };
 
 struct fi_eq_attr;
@@ -728,6 +742,8 @@ enum fi_type {
 	FI_TYPE_COLLECTIVE_OP,
 	FI_TYPE_HMEM_IFACE,
 	FI_TYPE_CQ_FORMAT,
+	FI_TYPE_LOG_LEVEL,
+	FI_TYPE_LOG_SUBSYS,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

@@ -57,8 +57,6 @@ struct ofi_epollfds_event {
 };
 #endif
 
-extern int ofi_poll_fairness;
-
 enum ofi_pollfds_ctl {
 	POLLFDS_CTL_ADD,
 	POLLFDS_CTL_DEL,
@@ -69,14 +67,13 @@ struct ofi_pollfds_work_item {
 	int		fd;
 	uint32_t	events;
 	void		*context;
-	enum ofi_pollfds_ctl type;
+	enum ofi_pollfds_ctl op;
 	struct slist_entry entry;
 };
 
 struct ofi_pollfds_ctx {
 	void		*context;
 	int		index;
-	int		hit_cnt;
 	int		hot_index;
 };
 
@@ -87,28 +84,35 @@ struct ofi_pollfds {
 	struct ofi_pollfds_ctx *ctx;
 	struct fd_signal signal;
 	struct slist	work_item_list;
-	ofi_mutex_t	lock;
+	struct ofi_genlock lock;
 
-	int		fairness_cntr;
-	int		hot_size;
-	int		hot_nfds;
-	struct pollfd	*hot_fds;
+	int (*add)(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		   void *context);
+	int (*del)(struct ofi_pollfds *pfds, int fd);
 };
 
+int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type);
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
-int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		    void *context);
+
+static inline int
+ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events, void *context)
+{
+	return pfds->add(pfds, fd, events, context);
+}
+
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
-int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
+
+static inline int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
+{
+	return pfds->del(pfds, fd);
+}
+
 int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     struct ofi_epollfds_event *events,
 		     int maxevents, int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
-
-void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd);
-void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd);
 
 /* OS specific */
 struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd);
@@ -198,5 +202,78 @@ typedef struct ofi_pollfds *ofi_epoll_t;
 #define EPOLL_CTL_MOD POLLFDS_CTL_MOD
 
 #endif /* HAVE_EPOLL */
+
+/* If we HAVE_EPOLL, the values for EPOLLIN and EPOLLOUT are the same as
+ * POLLIN and POLLOUT, at least in the gnu headers.  If we don't have
+ * epoll support, then we're emulating it using poll, in which case the
+ * values are also the same (e.g. OFI_EPOLL_IN == POLLIN).
+ *
+ * This use of this function helps make it clear that we're passing the
+ * correct event values to epoll, versus poll, without actually incurring
+ * the unnecessary overhead of converting the values.
+ */
+static inline uint32_t ofi_poll_to_epoll(uint32_t events)
+{
+	return events;
+}
+
+/* Dynamic poll: selects between using poll vs epoll.
+ */
+enum ofi_dynpoll_type {
+	OFI_DYNPOLL_UNINIT,
+	OFI_DYNPOLL_EPOLL,
+	OFI_DYNPOLL_POLL,
+};
+
+struct ofi_dynpoll {
+	enum ofi_dynpoll_type type;
+	union {
+		struct ofi_pollfds *pfds;
+		ofi_epoll_t ep;
+	};
+
+	int	(*add)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
+			void *context);
+	int	(*mod)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
+			void *context);
+	int	(*del)(struct ofi_dynpoll *dynpoll, int fd);
+	int	(*wait)(struct ofi_dynpoll *dynpoll,
+			struct ofi_epollfds_event *events, int maxevents,
+			int timeout);
+	void	(*close)(struct ofi_dynpoll *dynpoll);
+};
+
+int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
+		       enum ofi_lock_type lock_type);
+void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll);
+
+static inline int
+ofi_dynpoll_add(struct ofi_dynpoll *dynpoll, int fd,
+		uint32_t events, void *context)
+{
+	return dynpoll->add(dynpoll, fd, events, context);
+}
+
+static inline int
+ofi_dynpoll_mod(struct ofi_dynpoll *dynpoll, int fd,
+		uint32_t events, void *context)
+{
+	return dynpoll->mod(dynpoll, fd, events, context);
+}
+
+static inline int
+ofi_dynpoll_del(struct ofi_dynpoll *dynpoll, int fd)
+{
+	return dynpoll->del(dynpoll, fd);
+}
+
+static inline int
+ofi_dynpoll_wait(struct ofi_dynpoll *dynpoll,
+		 struct ofi_epollfds_event *events,
+		 int maxevents, int timeout)
+{
+	return dynpoll->wait(dynpoll, events, maxevents, timeout);
+}
+
 
 #endif  /* _OFI_EPOLL_H_ */

@@ -3,6 +3,9 @@
 /* adds build_id to version if it was defined */
 #undef BUILD_ID
 
+/* CUDA Support */
+#undef ENABLE_CUDA_DLOPEN
+
 /* defined to 1 if libfabric was configured with --enable-debug, 0 otherwise
    */
 #undef ENABLE_DEBUG
@@ -102,8 +105,14 @@
 /* Define to 1 if you have the `dl' library (-ldl). */
 #undef HAVE_LIBDL
 
+/* i915 DRM header (SLES) */
+#undef HAVE_LIBDRM
+
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
+
+/* Define to 1 if you have the <linux/idxd.h> header file. */
+#undef HAVE_LINUX_IDXD_H
 
 /* Whether we have __builtin_ia32_rdpmc() and linux/perf_event.h file or not
    */
@@ -123,6 +132,12 @@
 
 /* Ignore HAVE_MRAIL_DL */
 #undef HAVE_MRAIL_DL
+
+/* Ignore HAVE_NET */
+#undef HAVE_NET
+
+/* Ignore HAVE_NET_DL */
+#undef HAVE_NET_DL
 
 /* Ignore HAVE_NEURON */
 #undef HAVE_NEURON

@@ -84,7 +84,6 @@ struct ofi_common_locks common_locks = {
 };
 
 size_t ofi_universe_size = 1024;
-int ofi_poll_fairness = 0;
 
 
 int ofi_genlock_init(struct ofi_genlock *lock,
@@ -92,6 +91,7 @@ int ofi_genlock_init(struct ofi_genlock *lock,
 {
 	int ret;
 
+	lock->lock_type = lock_type;
 	switch (lock->lock_type) {
 	case OFI_LOCK_SPINLOCK:
 		ret = ofi_spin_init(&lock->base.spinlock);
@@ -105,12 +105,19 @@ int ofi_genlock_init(struct ofi_genlock *lock,
 		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_op;
 		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
 		break;
-	case OFI_LOCK_NONE:
+	case OFI_LOCK_NOOP:
 		/* Use mutex for debug no-op support */
 		ret = ofi_mutex_init(&lock->base.mutex);
 		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_noop;
 		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_noop;
 		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
+		break;
+	case OFI_LOCK_NONE:
+		ret = 0;
+		lock->base.nolock = NULL;
+		lock->lock = (ofi_genlock_lockop_t) ofi_nolock_lock_op;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_nolock_unlock_op;
+		lock->held = (ofi_genlock_lockheld_t) ofi_nolock_held_op;
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -127,8 +134,10 @@ void ofi_genlock_destroy(struct ofi_genlock *lock)
 		ofi_spin_destroy(&lock->base.spinlock);
 		break;
 	case OFI_LOCK_MUTEX:
-	case OFI_LOCK_NONE:
+	case OFI_LOCK_NOOP:
 		ofi_mutex_destroy(&lock->base.mutex);
+		break;
+	case OFI_LOCK_NONE:
 		break;
 	default:
 		assert(0);
@@ -445,6 +454,10 @@ sa_sin6:
 		break;
 	case FI_ADDR_STR:
 		size = snprintf(buf, *len, "%s", (const char *) addr);
+		break;
+	case FI_ADDR_CXI:
+		size = snprintf(buf, *len, "fi_addr_cxi://0x%08" PRIx32,
+				*(uint32_t *)addr);
 		break;
 	default:
 		return NULL;
@@ -1375,8 +1388,10 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Zerocopy data was copied\n");
 disable:
-		FI_WARN(prov, FI_LOG_EP_DATA, "disabling zerocopy\n");
-		bsock->zerocopy_size = SIZE_MAX;
+		if (bsock->zerocopy_size != SIZE_MAX) {
+			FI_WARN(prov, FI_LOG_EP_DATA, "disabling zerocopy\n");
+			bsock->zerocopy_size = SIZE_MAX;
+		}
 	}
 	return bsock->done_index;
 }
@@ -1388,12 +1403,15 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 }
 #endif
 
+
+/* Poll file descriptor set abstraction - emulates epoll over poll */
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 {
 	struct pollfd *fds;
 	struct ofi_pollfds_ctx *ctx;
 	size_t size;
 
+	assert(ofi_genlock_held(&pfds->lock));
 	if (max_size < pfds->size)
 		return FI_SUCCESS;
 
@@ -1423,91 +1441,27 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 	return FI_SUCCESS;
 }
 
-int ofi_pollfds_create(struct ofi_pollfds **pfds)
+static int ofi_pollfds_match_fd(struct slist_entry *entry, const void *arg)
 {
-	int ret;
+	struct ofi_pollfds_work_item *item;
+	int fd = (int) (uintptr_t) arg;
 
-	*pfds = calloc(1, sizeof(struct ofi_pollfds));
-	if (!*pfds)
-		return -FI_ENOMEM;
-
-	ret = ofi_pollfds_grow(*pfds, 63);
-	if (ret)
-		goto err1;
-
-	ret = fd_signal_init(&(*pfds)->signal);
-	if (ret)
-		goto err2;
-
-	(*pfds)->fds[0].fd = (*pfds)->signal.fd[FI_READ_FD];
-	(*pfds)->fds[0].events = POLLIN;
-	(*pfds)->nfds++;
-	slist_init(&(*pfds)->work_item_list);
-	ofi_mutex_init(&(*pfds)->lock);
-	return FI_SUCCESS;
-err2:
-	free((*pfds)->fds);
-err1:
-	free(*pfds);
-	return ret;
+	item = container_of(entry, struct ofi_pollfds_work_item, entry);
+	return item->fd == fd;
 }
 
-void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd)
+static struct ofi_pollfds_work_item *
+ofi_pollfds_find_item(struct ofi_pollfds *pfds, int fd)
 {
-	struct pollfd *new_fds;
-	struct ofi_pollfds_ctx *ctx;
-	int size;
+	struct slist_entry *entry;
 
-	assert(ofi_poll_fairness && fd >= 0);
-	ctx = ofi_pollfds_get_ctx(pfds, fd);
-	if (!ctx || ctx->hot_index >= 0)
-		return;
-
-	if (pfds->hot_nfds >= pfds->hot_size) {
-		size = pfds->hot_size + 8;
-		new_fds = calloc(size, sizeof(*new_fds));
-		if (!new_fds)
-			return;
-
-		if (pfds->hot_size) {
-			memcpy(new_fds, pfds->hot_fds,
-			       pfds->hot_size * sizeof(*new_fds));
-			free(pfds->hot_fds);
-		}
-
-		pfds->hot_fds = new_fds;
-		pfds->hot_size = size;
-	}
-
-	pfds->hot_fds[pfds->hot_nfds] = pfds->fds[ctx->index];
-	ctx->hot_index = pfds->hot_nfds++;
-	ctx->hit_cnt = 1;
-}
-
-void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd)
-{
-	struct ofi_pollfds_ctx *swap_ctx, *ctx;
-	struct pollfd *swap_pfd;
-
-	assert(ofi_poll_fairness && fd >= 0);
-	ctx = ofi_pollfds_get_ctx(pfds, fd);
-	if (!ctx || ctx->hot_index < 0)
-		return;
-
-	assert(pfds->hot_nfds);
-	if (ctx->hot_index < pfds->hot_nfds - 1) {
-		swap_pfd = &pfds->hot_fds[pfds->hot_nfds - 1];
-		swap_ctx = ofi_pollfds_get_ctx(pfds, swap_pfd->fd);
-		assert(swap_ctx);
-
-		pfds->hot_fds[ctx->hot_index] = *swap_pfd;
-		swap_ctx->hot_index = ctx->hot_index;
-	}
-
-	OFI_DBG_SET(pfds->hot_fds[pfds->hot_nfds].fd, INVALID_SOCKET);
-	pfds->hot_nfds--;
-	ctx->hot_index = -1;
-	ctx->hit_cnt = 0;
+	assert(ofi_genlock_held(&pfds->lock));
+	entry = slist_find_first_match(&pfds->work_item_list,
+				       ofi_pollfds_match_fd,
+				       (void *) (uintptr_t) fd);
+	if (!entry)
+		return NULL;
+	return container_of(entry, struct ofi_pollfds_work_item, entry);
 }
 
 static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
@@ -1522,27 +1476,18 @@ static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
 	item->fd = fd;
 	item->events = events;
 	item->context = context;
-	item->type = op;
-	ofi_mutex_lock(&pfds->lock);
+	item->op = op;
+	ofi_genlock_lock(&pfds->lock);
 	slist_insert_tail(&item->entry, &pfds->work_item_list);
 	fd_signal_set(&pfds->signal);
-	ofi_mutex_unlock(&pfds->lock);
+	ofi_genlock_unlock(&pfds->lock);
 	return 0;
 }
 
-int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+int ofi_pollfds_add_ctl(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context)
 {
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_ADD, fd, events, context);
-}
-
-static int ofi_pollfds_find(struct slist_entry *entry, const void *arg)
-{
-	struct ofi_pollfds_work_item *item;
-	int fd = (int) (uintptr_t) arg;
-
-	item = container_of(entry, struct ofi_pollfds_work_item, entry);
-	return item->fd == fd;
 }
 
 /* We're not changing the fds, just fields.  This is always 'racy' if
@@ -1558,10 +1503,9 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context)
 {
 	struct ofi_pollfds_ctx *ctx;
-	struct slist_entry *entry;
 	struct ofi_pollfds_work_item *item;
 
-	ofi_mutex_lock(&pfds->lock);
+	ofi_genlock_lock(&pfds->lock);
 	ctx = ofi_pollfds_get_ctx(pfds, fd);
 	if (ctx) {
 		pfds->fds[ctx->index].events = (short) events;
@@ -1570,37 +1514,32 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 	}
 
 	/* fd may be queued for insertion */
-	entry = slist_find_first_match(&pfds->work_item_list, ofi_pollfds_find,
-				       (void *) (uintptr_t) fd);
-	if (entry) {
-		item = container_of(entry, struct ofi_pollfds_work_item, entry);
+	item = ofi_pollfds_find_item(pfds, fd);
+	if (item) {
 		item->events = events;
 		item->context = context;
 	}
 
 signal:
 	fd_signal_set(&pfds->signal);
-	ofi_mutex_unlock(&pfds->lock);
+	ofi_genlock_unlock(&pfds->lock);
 	return 0;
 }
 
-int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
+int ofi_pollfds_del_ctl(struct ofi_pollfds *pfds, int fd)
 {
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_DEL, fd, 0, NULL);
 }
 
-static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
-			       struct ofi_pollfds_work_item *item)
+static int ofi_pollfds_do_del(struct ofi_pollfds *pfds, int fd)
 {
 	struct ofi_pollfds_ctx *ctx, *swap_ctx;
 	struct pollfd *swap_pfd;
 
-	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	assert(ofi_genlock_held(&pfds->lock));
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
 	if (!ctx)
-		return;
-
-	if (ofi_poll_fairness && ctx->hot_index >= 0)
-		ofi_pollfds_coolfd(pfds, item->fd);
+		return 0;
 
 	if (ctx->index < pfds->nfds - 1) {
 		swap_pfd = &pfds->fds[pfds->nfds - 1];
@@ -1615,29 +1554,53 @@ static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 	}
 	pfds->nfds--;
 	ctx->index = -1;
+	return 0;
 }
 
-static void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
-			       struct ofi_pollfds_work_item *item)
+static int
+ofi_pollfds_sync_del(struct ofi_pollfds *pfds, int fd)
+{
+	int ret;
+
+	ofi_genlock_lock(&pfds->lock);
+	ret = ofi_pollfds_do_del(pfds, fd);
+	ofi_genlock_unlock(&pfds->lock);
+	return ret;
+}
+
+static int
+ofi_pollfds_do_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		   void *context)
 {
 	struct ofi_pollfds_ctx *ctx;
 
-	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	assert(ofi_genlock_held(&pfds->lock));
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
 	if (!ctx) {
-		ctx = ofi_pollfds_alloc_ctx(pfds, item->fd);
+		ctx = ofi_pollfds_alloc_ctx(pfds, fd);
 		if (!ctx) {
 			assert(0);
-			return;
+			return - FI_ENOMEM;
 		}
 	}
 
-	ctx->context = item->context;
-	pfds->fds[ctx->index].fd = item->fd;
-	pfds->fds[ctx->index].events = (short) item->events;
+	ctx->context = context;
+	pfds->fds[ctx->index].fd = fd;
+	pfds->fds[ctx->index].events = (short) events;
 	pfds->fds[ctx->index].revents = 0;
+	return 0;
+}
 
-	if (ofi_poll_fairness)
-		ofi_pollfds_heatfd(pfds, item->fd);
+static int
+ofi_pollfds_sync_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		     void *context)
+{
+	int ret;
+
+	ofi_genlock_lock(&pfds->lock);
+	ret = ofi_pollfds_do_add(pfds, fd, events, context);
+	ofi_genlock_unlock(&pfds->lock);
+	return ret;
 }
 
 static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
@@ -1645,16 +1608,18 @@ static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 	struct slist_entry *entry;
 	struct ofi_pollfds_work_item *item;
 
+	assert(ofi_genlock_held(&pfds->lock));
 	while (!slist_empty(&pfds->work_item_list)) {
 		entry = slist_remove_head(&pfds->work_item_list);
 		item = container_of(entry, struct ofi_pollfds_work_item, entry);
 
-		switch (item->type) {
+		switch (item->op) {
 		case POLLFDS_CTL_ADD:
-			ofi_pollfds_do_add(pfds, item);
+			ofi_pollfds_do_add(pfds, item->fd, item->events,
+					   item->context);
 			break;
 		case POLLFDS_CTL_DEL:
-			ofi_pollfds_do_del(pfds, item);
+			ofi_pollfds_do_del(pfds, item->fd);
 			break;
 		default:
 			assert(0);
@@ -1662,138 +1627,55 @@ static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 		}
 		free(item);
 	}
-	pfds->fairness_cntr = 0;
-}
-
-static int ofi_pollfds_hotties(struct ofi_pollfds *pfds,
-			       struct ofi_epollfds_event *events,
-			       int maxevents)
-{
-	struct ofi_pollfds_ctx *ctx;
-	int found, i, ret;
-
-	assert(ofi_poll_fairness);
-	ret = poll(pfds->hot_fds, pfds->hot_nfds, 0);
-	if (ret == SOCKET_ERROR)
-		return -ofi_sockerr();
-	else if (ret == 0)
-		return 0;
-
-	found = 0;
-	ret = MIN(maxevents, ret);
-
-	for (i = 0; i < pfds->hot_nfds && found < ret; i++) {
-		if (pfds->hot_fds[i].revents) {
-			events[found].events = pfds->hot_fds[i].revents;
-
-			ctx = ofi_pollfds_get_ctx(pfds, pfds->hot_fds[i].fd);
-			if (ctx && ctx->hot_index == i) {
-				events[found++].data.ptr = ctx->context;
-				ctx->hit_cnt++;
-			}
-		}
-	}
-
-	return found;
-}
-
-static void ofi_pollfds_adjust_temp(struct ofi_pollfds *pfds, int fd)
-{
-	struct pollfd *pfd;
-	struct ofi_pollfds_ctx *ctx;
-
-	assert(ofi_poll_fairness && fd >= 0);
-	ctx = ofi_pollfds_get_ctx(pfds, fd);
-	if (!ctx)
-		return;
-
-	pfd = &pfds->fds[ctx->index];
-
-	if (pfd->revents || ctx->hit_cnt || (pfd->events & POLLOUT)) {
-		ctx->hit_cnt = 0;
-		if (ctx->hot_index == -1)
-			ofi_pollfds_heatfd(pfds, fd);
-
-	} else if (ctx->hot_index != -1) {
-		ofi_pollfds_coolfd(pfds, fd);
-	}
-}
-
-static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
-			       struct ofi_epollfds_event *events,
-			       int maxevents, int timeout)
-{
-	struct ofi_pollfds_ctx *ctx;
-	uint64_t endtime;
-	int i, ret;
-	int found = 0;
-
-	endtime = ofi_timeout_time(timeout);
-	do {
-		ret = poll(pfds->fds, pfds->nfds, timeout);
-		if (ret == SOCKET_ERROR)
-			return -ofi_sockerr();
-		else if (ret == 0)
-			return 0;
-
-		ofi_mutex_lock(&pfds->lock);
-		if (!slist_empty(&pfds->work_item_list))
-			ofi_pollfds_process_work(pfds);
-		ofi_mutex_unlock(&pfds->lock);
-
-		if (pfds->fds[0].revents) {
-			fd_signal_reset(&pfds->signal);
-			ret--;
-		}
-
-		ret = MIN(maxevents, ret);
-
-		/* Index 0 is the internal signaling fd, skip it */
-		for (i = 1; i < pfds->nfds && found < ret; i++) {
-			if (pfds->fds[i].revents) {
-				events[found].events = pfds->fds[i].revents;
-				ctx = ofi_pollfds_get_ctx(pfds, pfds->fds[i].fd);
-				if (ctx)
-					events[found++].data.ptr = ctx->context;
-			}
-
-			if (ofi_poll_fairness && pfds->fds[i].fd >= 0)
-				ofi_pollfds_adjust_temp(pfds, pfds->fds[i].fd);
-		}
-
-		if (ofi_poll_fairness) {
-			for (; i < pfds->nfds; i++) {
-				if (pfds->fds[i].fd >= 0)
-					ofi_pollfds_adjust_temp(pfds, pfds->fds[i].fd);
-			}
-		}
-
-	} while (!found && !ofi_adjust_timeout(endtime, &timeout));
-
-	return found;
 }
 
 int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     struct ofi_epollfds_event *events,
 		     int maxevents, int timeout)
 {
-	int ret;
+	struct ofi_pollfds_ctx *ctx;
+	uint64_t endtime;
+	int cnt, i, skip, ret = 0;
 
-	ofi_mutex_lock(&pfds->lock);
+	ofi_genlock_lock(&pfds->lock);
 	if (!slist_empty(&pfds->work_item_list))
 		ofi_pollfds_process_work(pfds);
-	ofi_mutex_unlock(&pfds->lock);
 
-	if ((pfds->fairness_cntr > 0) && (timeout == 0) && pfds->hot_nfds) {
-		assert(ofi_poll_fairness);
-		ret = ofi_pollfds_hotties(pfds, events, maxevents);
-		pfds->fairness_cntr--;
-	} else {
-		ret = ofi_pollfds_waitall(pfds, events, maxevents, timeout);
-		if (ofi_poll_fairness)
-			pfds->fairness_cntr = ofi_poll_fairness;
-	}
+	skip = (timeout == 0);
+	endtime = ofi_timeout_time(timeout);
+	do {
+		ofi_genlock_unlock(&pfds->lock);
+		cnt = poll(pfds->fds + skip, pfds->nfds - skip, timeout);
+		if (cnt == SOCKET_ERROR)
+			return -ofi_sockerr();
+		else if (cnt == 0)
+			return 0;
 
+		ofi_genlock_lock(&pfds->lock);
+		if (!skip && pfds->fds[0].revents) {
+			assert(cnt > 0);
+			fd_signal_reset(&pfds->signal);
+			cnt--;
+		}
+
+		if (!slist_empty(&pfds->work_item_list))
+			ofi_pollfds_process_work(pfds);
+
+		/* Index 0 is the internal signaling fd, skip it */
+		cnt = MIN(maxevents, cnt);
+		for (i = 1; cnt && i < pfds->nfds; i++) {
+			if (pfds->fds[i].revents) {
+				ctx = ofi_pollfds_get_ctx(pfds, pfds->fds[i].fd);
+				if (ctx) {
+					events[ret].events = pfds->fds[i].revents;
+					events[ret++].data.ptr = ctx->context;
+				}
+				cnt--;
+			}
+		}
+	} while (!ret && !ofi_adjust_timeout(endtime, &timeout));
+
+	ofi_genlock_unlock(&pfds->lock);
 	return ret;
 }
 
@@ -1802,21 +1684,178 @@ void ofi_pollfds_close(struct ofi_pollfds *pfds)
 	struct ofi_pollfds_work_item *item;
 	struct slist_entry *entry;
 
-	if (pfds) {
-		while (!slist_empty(&pfds->work_item_list)) {
-			entry = slist_remove_head(&pfds->work_item_list);
-			item = container_of(entry,
-					    struct ofi_pollfds_work_item,
-					    entry);
-			free(item);
-		}
-		ofi_mutex_destroy(&pfds->lock);
-		fd_signal_free(&pfds->signal);
-		free(pfds->fds);
-		free(pfds);
+	if (!pfds)
+		return;
+
+	while (!slist_empty(&pfds->work_item_list)) {
+		entry = slist_remove_head(&pfds->work_item_list);
+		item = container_of(entry,
+					struct ofi_pollfds_work_item,
+					entry);
+		free(item);
+	}
+	ofi_genlock_destroy(&pfds->lock);
+	fd_signal_free(&pfds->signal);
+	free(pfds->fds);
+	free(pfds);
+}
+
+int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type)
+{
+	int ret;
+
+	*pfds = calloc(1, sizeof(struct ofi_pollfds));
+	if (!*pfds)
+		return -FI_ENOMEM;
+
+	ret = ofi_genlock_init(&(*pfds)->lock, lock_type);
+	if (ret)
+		goto err0;
+
+	ofi_genlock_lock(&(*pfds)->lock);
+	ret = ofi_pollfds_grow(*pfds, 63);
+	ofi_genlock_unlock(&(*pfds)->lock);
+	if (ret)
+		goto err1;
+
+	ret = fd_signal_init(&(*pfds)->signal);
+	if (ret)
+		goto err2;
+
+	(*pfds)->fds[0].fd = (*pfds)->signal.fd[FI_READ_FD];
+	(*pfds)->fds[0].events = POLLIN;
+	(*pfds)->nfds++;
+	slist_init(&(*pfds)->work_item_list);
+	if (lock_type == OFI_LOCK_NONE || lock_type == OFI_LOCK_NOOP) {
+		(*pfds)->add = ofi_pollfds_sync_add;
+		(*pfds)->del = ofi_pollfds_sync_del;
+	} else {
+		(*pfds)->add = ofi_pollfds_add_ctl;
+		(*pfds)->del = ofi_pollfds_del_ctl;
+	}
+	return FI_SUCCESS;
+err2:
+	free((*pfds)->fds);
+err1:
+	ofi_genlock_destroy(&(*pfds)->lock);
+err0:
+	free(*pfds);
+	return ret;
+}
+
+int ofi_pollfds_create(struct ofi_pollfds **pfds)
+{
+	return ofi_pollfds_create_(pfds, OFI_LOCK_MUTEX);
+}
+
+
+/* Dynamic poll */
+static int
+ofi_dynpoll_add_epoll(struct ofi_dynpoll *dynpoll, int fd,
+		      uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_add(dynpoll->ep, fd, events, context);
+}
+
+static int
+ofi_dynpoll_mod_epoll(struct ofi_dynpoll *dynpoll, int fd,
+		      uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_mod(dynpoll->ep, fd, events, context);
+}
+
+static int ofi_dynpoll_del_epoll(struct ofi_dynpoll *dynpoll, int fd)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_del(dynpoll->ep, fd);
+}
+
+static int
+ofi_dynpoll_wait_epoll(struct ofi_dynpoll *dynpoll,
+		       struct ofi_epollfds_event *events,
+		       int maxevents, int timeout)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_wait(dynpoll->ep, events, maxevents, timeout);
+}
+
+static int
+ofi_dynpoll_add_poll(struct ofi_dynpoll *dynpoll, int fd,
+		     uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_add(dynpoll->pfds, fd, events, context);
+}
+
+static int
+ofi_dynpoll_mod_poll(struct ofi_dynpoll *dynpoll, int fd,
+		     uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_mod(dynpoll->pfds, fd, events, context);
+}
+
+static int ofi_dynpoll_del_poll(struct ofi_dynpoll *dynpoll, int fd)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_del(dynpoll->pfds, fd);
+}
+
+static int
+ofi_dynpoll_wait_poll(struct ofi_dynpoll *dynpoll,
+		      struct ofi_epollfds_event *events,
+		      int maxevents, int timeout)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_wait(dynpoll->pfds, events, maxevents, timeout);
+}
+
+void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll)
+{
+	switch (dynpoll->type) {
+	case OFI_DYNPOLL_EPOLL:
+		ofi_epoll_close(dynpoll->ep);
+		break;
+	case OFI_DYNPOLL_POLL:
+		ofi_pollfds_close(dynpoll->pfds);
+		break;
+	default:
+		assert(0);
+		break;
 	}
 }
 
+int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
+		       enum ofi_lock_type lock_type)
+{
+	int ret;
+
+	dynpoll->type = type;
+	switch (type) {
+	case OFI_DYNPOLL_EPOLL:
+		ret = ofi_epoll_create(&dynpoll->ep);
+		dynpoll->add = ofi_dynpoll_add_epoll;
+		dynpoll->mod = ofi_dynpoll_mod_epoll;
+		dynpoll->del = ofi_dynpoll_del_epoll;
+		dynpoll->wait = ofi_dynpoll_wait_epoll;
+		break;
+	case OFI_DYNPOLL_POLL:
+		ret = ofi_pollfds_create_(&dynpoll->pfds, lock_type);
+		dynpoll->add = ofi_dynpoll_add_poll;
+		dynpoll->mod = ofi_dynpoll_mod_poll;
+		dynpoll->del = ofi_dynpoll_del_poll;
+		dynpoll->wait = ofi_dynpoll_wait_poll;
+		break;
+	default:
+		assert(0);
+		ret = -FI_EINVAL;
+		break;
+	}
+
+	return ret;
+};
 
 void ofi_free_list_of_addr(struct slist *addr_list)
 {
@@ -1895,16 +1934,30 @@ int ofi_getifaddrs(struct ifaddrs **ifaddr)
 	return FI_SUCCESS;
 }
 
+/* Sort based on:
+ * 1. link speed, 2. SA family, 3. address
+ */
 static int
-ofi_addr_list_entry_comp_speed(struct slist_entry *cur, const void *insert)
+ofi_compare_addr_entry(struct slist_entry *cur, const void *insert)
 {
-	const struct ofi_addr_list_entry *cur_addr =
-		container_of(cur, struct ofi_addr_list_entry, entry);
-	const struct ofi_addr_list_entry *insert_addr =
-		container_of((const struct slist_entry *) insert,
+	const struct ofi_addr_list_entry *cur_addr, *insert_addr;
+
+	cur_addr = container_of(cur, struct ofi_addr_list_entry, entry);
+	insert_addr = container_of((const struct slist_entry *) insert,
 			     struct ofi_addr_list_entry, entry);
 
-	return (cur_addr->speed < insert_addr->speed);
+	if (insert_addr->speed > cur_addr->speed)
+		return 1;
+	if (insert_addr->speed < cur_addr->speed)
+		return 0;
+
+	if (insert_addr->ipaddr.sa.sa_family < cur_addr->ipaddr.sa.sa_family)
+		return 1;
+	if (insert_addr->ipaddr.sa.sa_family > cur_addr->ipaddr.sa.sa_family)
+		return 0;
+
+	return ofi_addr_cmp(&core_prov, &insert_addr->ipaddr.sa,
+			    &cur_addr->ipaddr.sa);
 }
 
 void ofi_set_netmask_str(char *netstr, size_t len, struct ifaddrs *ifa)
@@ -1949,10 +2002,8 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 
 	if (iface) {
 		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (strncmp(iface, ifa->ifa_name,
-					strlen(iface)) == 0) {
+			if (!strncmp(iface, ifa->ifa_name, strlen(iface) + 1))
 				break;
-			}
 		}
 		if (ifa == NULL) {
 			FI_INFO(prov, FI_LOG_CORE,
@@ -1968,7 +2019,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			((ifa->ifa_addr->sa_family != AF_INET) &&
 			(ifa->ifa_addr->sa_family != AF_INET6)))
 			continue;
-		if (iface && strncmp(iface, ifa->ifa_name, strlen(iface)) != 0) {
+		if (iface && strncmp(iface, ifa->ifa_name, strlen(iface) + 1)) {
 			FI_DBG(prov, FI_LOG_CORE,
 				"Skip (%s) interface\n", ifa->ifa_name);
 			continue;
@@ -2001,7 +2052,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			"iface name: %s, speed: %zu\n",
 			addr_entry->ipstr, ifa->ifa_name, addr_entry->speed);
 
-		slist_insert_before_first_match(addr_list, ofi_addr_list_entry_comp_speed,
+		slist_insert_before_first_match(addr_list, ofi_compare_addr_entry,
 						&addr_entry->entry);
 	}
 

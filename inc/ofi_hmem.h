@@ -43,6 +43,26 @@
 
 extern bool ofi_hmem_disable_p2p;
 
+#define MAX_IPC_HANDLE_SIZE	64
+
+/*
+ * This structure is part of the
+ * the shm communication protocol
+ * defined in ofi_shm.h.
+ * Please make sure the SMR_VERSION are
+ * bumped and SMR_CMD_SIZE are large
+ * enough, for any changes in this
+ * structure.
+ */
+struct ipc_info {
+	uint64_t	iface;
+	uint64_t	base_address;
+	uint64_t	base_length;
+	uint64_t	device;
+	uint64_t	offset;
+	uint8_t		ipc_handle[MAX_IPC_HANDLE_SIZE];
+};
+
 #if HAVE_CUDA
 
 #include <cuda.h>
@@ -108,6 +128,7 @@ struct ofi_hmem_ops {
 	int (*host_unregister)(void *ptr);
 	int (*get_base_addr)(const void *ptr, void **base, size_t *size);
 	bool (*is_ipc_enabled)(void);
+	int (*get_ipc_handle_size)(size_t *size);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -134,7 +155,9 @@ int cuda_dev_unregister(uint64_t handle);
 int cuda_get_handle(void *dev_buf, void **handle);
 int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
+int cuda_get_base_addr(const void *ptr, void **base, size_t *size);
 bool cuda_is_ipc_enabled(void);
+int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
@@ -145,6 +168,7 @@ int cuda_gdrcopy_hmem_init(void);
 int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
+int cuda_set_sync_memops(void *ptr);
 
 #define ZE_MAX_DEVICES 8
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
@@ -159,6 +183,7 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 			       uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
+int ze_get_ipc_handle_size(size_t *size);
 int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
@@ -169,6 +194,23 @@ int neuron_hmem_init(void);
 int neuron_hmem_cleanup(void);
 void *neuron_alloc(void **handle, size_t size);
 void neuron_free(void **handle);
+
+int synapseai_init(void);
+int synapseai_cleanup(void);
+int synapseai_copy_to_hmem(uint64_t device, void *dest, const void *src,
+                           size_t size);
+int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
+                             size_t size);
+int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd);
+bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
+                             uint64_t *flags);
+int synapseai_get_handle(void *dev_buf, void **handle);
+int synapseai_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int synapseai_close_handle(void *ipc_ptr);
+int synapseai_host_register(void *ptr, size_t size);
+int synapseai_host_unregister(void *ptr);
+int synapseai_get_base_addr(const void *ptr, void **base, size_t *size);
+bool synapseai_is_ipc_enabled(void);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
@@ -198,6 +240,11 @@ static inline int ofi_hmem_no_open_handle(void **handle, uint64_t device, void *
 }
 
 static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_get_ipc_handle_size(size_t *size)
 {
 	return -FI_ENOSYS;
 }
@@ -252,5 +299,6 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
+size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface);
 
 #endif /* _OFI_HMEM_H_ */

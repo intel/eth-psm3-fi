@@ -35,6 +35,8 @@
 #define _GNU_SOURCE
 #endif /* _GNU_SOURCE */
 
+#include "config.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -320,6 +322,7 @@ struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
 {
 	struct ofi_pollfds_ctx *ctx;
 
+	assert(ofi_genlock_held(&pfds->lock));
 	if (fd < 0 || fd >= pfds->size)
 		return NULL;
 
@@ -335,6 +338,7 @@ struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd)
 {
 	struct ofi_pollfds_ctx *ctx;
 
+	assert(ofi_genlock_held(&pfds->lock));
 	assert(!ofi_pollfds_get_ctx(pfds, fd));
 	if (fd >= pfds->size) {
 		if (ofi_pollfds_grow(pfds, fd))

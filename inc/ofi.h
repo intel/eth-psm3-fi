@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
  * Copyright (c) 2016-2018 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,7 +36,7 @@
 #ifndef _OFI_H_
 #define _OFI_H_
 
-#include "config.h"
+#include <config.h>
 
 #include <assert.h>
 #include <pthread.h>
@@ -189,6 +190,11 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+
+#ifndef STRINGIFY
+#define __STRINGIFY(expr) #expr
+#define STRINGIFY(expr) __STRINGIFY(expr)
 #endif
 
 #define TAB "    "
@@ -411,6 +417,11 @@ static inline uint32_t ofi_xorshift_random_r(uint32_t *seed)
 uint32_t ofi_generate_seed(void);
 
 size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
+
+int ofi_open_log(uint32_t version, void *attr, size_t attr_len,
+		 uint64_t flags, struct fid **fid, void *context);
+void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level);
+void ofi_tostr_log_subsys(char *buf, size_t len, enum fi_log_subsys subsys);
 
 #ifdef __cplusplus
 }

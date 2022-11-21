@@ -89,25 +89,6 @@ extern "C" {
 /* Memory registration should not be cached */
 #define OFI_MR_NOCACHE		BIT_ULL(60)
 
-/* Provider domain flags
- * SPINLOCK: Use spinlocks for domain and CQ objects.
- *           EP is not included (not needed yet)
- */
-#define OFI_DOMAIN_SPINLOCK	BIT_ULL(61)
-
-#define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
-	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
-	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
-	       q_strerror((q), (entry)->prov_errno,				\
-			  (entry)->err_data, NULL, 0),				\
-	       (entry)->prov_errno)
-
-#define OFI_CQ_STRERROR(prov, level, subsys, cq, entry) \
-	OFI_Q_STRERROR(prov, level, subsys, cq, "cq", entry, fi_cq_strerror)
-
-#define OFI_EQ_STRERROR(prov, level, subsys, eq, entry) \
-	OFI_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
-
 #define OFI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type) \
 	do {									\
 		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",		\
@@ -234,7 +215,8 @@ struct util_domain {
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
-		     struct util_domain *domain, void *context, uint64_t flags);
+		    struct util_domain *domain, void *context,
+		    enum ofi_lock_type lock_type);
 int ofi_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int ofi_domain_close(struct util_domain *domain);
 
@@ -537,7 +519,7 @@ struct util_cq {
 	struct slist		aux_queue;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
-	ofi_atomic32_t		signaled;
+	ofi_atomic32_t		wakeup;
 	ofi_cq_progress_func	progress;
 };
 
@@ -549,6 +531,7 @@ int ofi_check_bind_cq_flags(struct util_ep *ep, struct util_cq *cq,
 void ofi_cq_progress(struct util_cq *cq);
 int ofi_cq_cleanup(struct util_cq *cq);
 int ofi_cq_control(struct fid *fid, int command, void *arg);
+
 ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count);
 ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr);
@@ -559,16 +542,13 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr, const void *cond, int timeout);
 int ofi_cq_signal(struct fid_cq *cq_fid);
+const char *ofi_cq_strerror(struct fid_cq *cq, int prov_errno,
+			    const void *err_data, char *buf, size_t len);
 
 int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
 			  size_t len, void *buf, uint64_t data, uint64_t tag,
 			  fi_addr_t src);
 
-static inline void util_cq_signal(struct util_cq *cq)
-{
-	assert(cq->wait);
-	cq->wait->signal(cq->wait);
-}
 
 static inline void
 ofi_cq_write_entry(struct util_cq *cq, void *context, uint64_t flags,
@@ -732,6 +712,7 @@ struct util_av_set {
 	struct util_coll_mc     coll_mc;
 	ofi_atomic32_t		ref;
 	ofi_mutex_t		lock;
+	size_t			max_array_size;
 };
 
 struct util_av_entry {
@@ -770,6 +751,8 @@ struct util_av {
 	ofi_mutex_t		ep_list_lock;
 };
 
+#define OFI_AV_DYN_ADDRLEN (1 << 0)
+
 struct util_av_attr {
 	/* Must be a multiple of 8 bytes */
 	size_t	addrlen;
@@ -780,6 +763,54 @@ struct util_av_attr {
 	size_t  context_len;
 	int	flags;
 };
+
+/* For AVs supporting RDM over MSG EPs. */
+
+/* There will be at most 1 peer address per AV entry.  There
+ * may be addresses that have not been inserted into the local
+ * AV, and have no matching entry.  This can occur if we are
+ * only receiving data from the remote rxm ep.
+ */
+struct util_peer_addr {
+	struct rxm_av *av;
+	fi_addr_t fi_addr;
+	struct ofi_rbnode *node;
+	int index;
+	int refcnt;
+	union ofi_sock_ip addr;
+};
+
+struct util_peer_addr *util_get_peer(struct rxm_av *av, const void *addr);
+void util_put_peer(struct util_peer_addr *peer);
+
+/* All peer addresses, whether they've been inserted into the AV
+ * or an endpoint has an active connection to it, are stored in
+ * the addr_map.  Peers are allocated from a buffer pool and
+ * assigned a local index using the pool.  All rxm endpoints
+ * maintain a connection array which is aligned with the peer_pool.
+ *
+ * We technically only need to store the index of each peer in
+ * the AV itself.  The 'util_av' could basically be replaced by
+ * an ofi_index_map.  However, too much of the existing code
+ * relies on the util_av existing and storing the AV addresses.
+ *
+ * A future cleanup would be to remove using the util_av and have the
+ * rxm_av implementation be independent.
+ */
+ struct rxm_av {
+	struct util_av util_av;
+	struct ofi_rbmap addr_map;
+	struct ofi_bufpool *peer_pool;
+	struct ofi_bufpool *conn_pool;
+};
+
+int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		     struct fid_av **fid_av, void *context, size_t conn_size);
+size_t rxm_av_max_peers(struct rxm_av *av);
+void rxm_ref_peer(struct util_peer_addr *peer);
+void *rxm_av_alloc_conn(struct rxm_av *av);
+void rxm_av_free_conn(struct rxm_av *av, void *conn_ctx);
+
 
 typedef int (*ofi_av_apply_func)(struct util_av *av, void *addr,
 				 fi_addr_t fi_addr, void *arg);
@@ -803,8 +834,6 @@ void ofi_av_write_event(struct util_av *av, uint64_t data,
 
 int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
-int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-			   struct fid_av **av, void *context, int flags);
 
 void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr);
 #define ofi_ip_av_get_addr ofi_av_get_addr

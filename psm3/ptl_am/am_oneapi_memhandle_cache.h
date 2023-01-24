@@ -63,11 +63,17 @@
 extern "C" {
 #endif
 
+#define ONEAPI_MEMHANDLE_CACHE_SIZE 64
+
+psm2_error_t am_ze_memhandle_cache_init(uint32_t memcache_size);
+
 ze_device_handle_t*
 am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
-				uint32_t length, int *ipc_fd, psm2_epaddr_t epaddr);
+				uint32_t length, psm2_epaddr_t epaddr, int device_index);
 void
-am_ze_memhandle_release(ze_device_handle_t* cuda_ipc_dev_ptr);
+am_ze_memhandle_release(ze_device_handle_t* ze_ipc_dev_ptr);
+
+void am_ze_memhandle_cache_map_fini();
 
 #ifdef __cplusplus
 } /* extern "C" */

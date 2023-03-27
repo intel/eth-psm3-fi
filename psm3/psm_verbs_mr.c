@@ -1273,10 +1273,6 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 				void *addr, uint64_t length, int access)
 {
 	psm3_verbs_mr_t mrc;
-#ifdef PSM_ONEAPI
-	void *base;
-	size_t len;
-#endif
 
 	psmi_assert(cache->pd);
 	if (! cache->pd)
@@ -1336,6 +1332,8 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 	psmi_assert(!!(access & IBV_ACCESS_IS_GPU_ADDR) == (PSMI_IS_GPU_ENABLED && PSMI_IS_GPU_MEM(addr)));
 #ifdef PSM_ONEAPI
 	if (access & IBV_ACCESS_IS_GPU_ADDR) {
+		void *base;
+		size_t len;
 #define MAX_USER_MR_SIZE (32 * 1024)
 		PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
 				    (const void *)addr, &base, &len);

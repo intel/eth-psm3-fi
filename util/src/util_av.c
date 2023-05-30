@@ -288,15 +288,14 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	struct util_av_entry *entry = NULL;
 
 	assert(ofi_mutex_held(&av->lock));
-	ofi_straddr_log(av->prov, FI_LOG_INFO, FI_LOG_AV,
-			"inserting addr\n", addr);
+	ofi_straddr_log(av->prov, FI_LOG_INFO, FI_LOG_AV, "inserting addr", addr);
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
 			*fi_addr = ofi_buf_index(entry);
 		if (ofi_atomic_inc32(&entry->use_cnt) > 1) {
 			ofi_straddr_log(av->prov, FI_LOG_WARN, FI_LOG_AV,
-					"addr already in AV\n", addr);
+							"addr already in AV", addr);
 		}
 	} else {
 		entry = ofi_ibuf_alloc(av->av_entry_pool);
@@ -517,7 +516,7 @@ static int util_verify_av_attr(struct util_domain *domain,
 		return -FI_ENOSYS;
 	}
 
-	if (attr->flags & ~(FI_EVENT | FI_READ | FI_SYMMETRIC)) {
+	if (attr->flags & ~(FI_EVENT | FI_READ | FI_SYMMETRIC | FI_PEER)) {
 		FI_WARN(domain->prov, FI_LOG_AV, "invalid flags\n");
 		return -FI_EINVAL;
 	}
@@ -690,7 +689,7 @@ int ofi_ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	if (ret)
 		return ret;
 
-	return ofi_ip_av_insertv(av, addr, ofi_sizeofaddr(addr),
+	return ofi_ip_av_insertv(av, addr, count ? ofi_sizeofaddr(addr) : 0,
 				 count, fi_addr, flags, context);
 }
 

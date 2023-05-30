@@ -39,7 +39,8 @@ static int ipc_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry 
 	int ret;
 
 	ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.ipc_handle,
-				   entry->info.device, &entry->info.ipc_mapped_addr);
+				   entry->info.iov.iov_len, entry->info.device,
+				   &entry->info.ipc_mapped_addr);
 	if (ret == -FI_EALREADY) {
 		/*
 		 * There is a chance we can get the -FI_EALREADY from the
@@ -59,7 +60,8 @@ static int ipc_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry 
 		 */
 		ofi_mr_cache_flush(cache, false);
 		ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.ipc_handle,
-						entry->info.device, &entry->info.ipc_mapped_addr);
+						entry->info.iov.iov_len, entry->info.device,
+						&entry->info.ipc_mapped_addr);
 	}
 	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -78,7 +80,7 @@ static void ipc_cache_delete_region(struct ofi_mr_cache *cache,
 
 /**
  * @brief Open an ipc cache
- * 
+ *
  * @param cache[in] the ipc cache
  * @param domain[in] the domain that the cache is attached to.
  * @param iface[in] the hmem iface of the ipc
@@ -90,11 +92,12 @@ int ofi_ipc_cache_open(struct ofi_mr_cache **cache,
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {0};
 	int ret;
 
-	/* no-op when cuda ipc is not enabled */
-	if (!ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA))
+	if (!ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA) &&
+		!ofi_hmem_is_ipc_enabled(FI_HMEM_ROCR))
 		return FI_SUCCESS;
 
 	memory_monitors[FI_HMEM_CUDA] = cuda_ipc_monitor;
+	memory_monitors[FI_HMEM_ROCR] = rocr_ipc_monitor;
 
 	*cache = calloc(1, sizeof(*(*cache)));
 	if (!*cache) {
@@ -123,7 +126,7 @@ out:
 
 /**
  * @brief Destroy the ipc cache
- * 
+ *
  * @param cache the ipc cache
  */
 void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache)
@@ -139,7 +142,7 @@ void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache)
  * part of each mr entry.
  * In a cache hit, the mapped_addr is retrieved from the matched mr entry. Otherwise,
  * the mapped_addr is obtained by opening the ipc handle.
- * 
+ *
  * @param[in] cache the ipc cache
  * @param[in] ipc_info the information of the ipc to be mapped.
  * @param[out] mr_entry the matched mr_entry of the ipc_info and mapped_addr.
@@ -153,7 +156,7 @@ int ofi_ipc_cache_search(struct ofi_mr_cache *cache, struct ipc_info *ipc_info,
 	int ret;
 	size_t ipc_handle_size;
 
-	info.iov.iov_base = (void *) (uintptr_t) ipc_info->base_address;
+	info.iov.iov_base = (void *) (uintptr_t) ipc_info->base_addr;
 	info.iov.iov_len = ipc_info->base_length;
 	info.iface = ipc_info->iface;
 

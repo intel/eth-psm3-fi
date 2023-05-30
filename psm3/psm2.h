@@ -1526,6 +1526,13 @@ psm2_error_t psm3_ep_query(int *num_of_epinfo, psm2_epinfo_t *array_of_epinfo);
  */
 psm2_error_t psm3_ep_epid_lookup(psm2_epid_t epid, psm2_epconn_t *epconn);
 
+/** @brief return psm3 process label
+ *
+ * Function to report process label for use in log messages.
+ * The process label consists of the hostname and rank.
+ */
+char *psm3_get_mylabel();
+
 /** @brief Query given PSM2 end-point for its connections.
  *
  * The need for this function comes with 'multi-ep' feature.
@@ -1708,7 +1715,6 @@ typedef enum psm2_info_query_et
        Output parameter: char*, description: name of the device's address. */
 	PSM2_INFO_QUERY_UNIT_ADDR_NAME,
 
-
 	PSM2_INFO_QUERY_LAST, /* must appear last, and the info query
 				 constants are used as an index. */
 } psm2_info_query_t;
@@ -1734,6 +1740,7 @@ typedef union psm2_info_query_arg
 	size_t                         length;
 	psm2_mq_t                      mq;
 	psm2_epaddr_t                  epaddr;
+	const char *                   name;
 } psm2_info_query_arg_t;
 
 /** @brief PSM2 info query
@@ -1756,6 +1763,112 @@ typedef union psm2_info_query_arg
  */
 psm2_error_t psm3_info_query(psm2_info_query_t, void *out,
 			     size_t nargs, psm2_info_query_arg_t []);
+
+/** @brief PSM2 wait
+ *
+ * Function that allows a client wait for PSM3 progress in rcvThread
+ * Used to support interrupt driven progress with CPU release when
+ * >1 process per core
+ *
+ * @param[in] int timeout  timeout in milliseconds.  <0 is infinite timeout
+ *
+ * @returns PSM2_OK if wait completed and some progress may have been made
+ * @returns PSM2_TIMEOUT if wait timeout exceeded with no progress made
+ * @returns PSM2_INTERNAL_ERR if wait mode not allowed for given HAL
+ * @returns PSM2_PARAM_ERR if not allowed for use with current PSM settings/mode
+ */
+psm2_error_t psm3_wait(int timeout);
+
+/** @brief PSM2 env initialization
+ *
+ * Function that parses /etc/psm3.conf, must be called before any
+ * psm3_getenv_* calls
+ */
+int psm3_env_initialize(void);
+
+/** @brief PSM2 env fetch
+ *
+ * Function that fetches parameters from /etc/psm3.conf or env
+ *
+ * @param[in] const char *name parameter name
+ * @retval The parameter fetched
+ * NULL The parameter was not exported
+ */
+char* psm3_env_get(const char *name);
+
+/** @brief PSM2 int parameter parsing
+ *
+ * Function that Parses int parameters
+ *
+ * @param[in] const char *str parameter value
+ * @retval 0 The string was valid, *val has value
+ * -1 The string was empty or NULL
+ * -2 The string had invalid syntax
+ */
+int psm3_parse_str_int(const char *string, int *val);
+
+/** @brief PSM2 unsigned int parameter parsing
+ *
+ * Function that Parses unsigned int parameters
+ *
+ * @param[in] const char *str parameter value
+ * @retval 0 The string was valid, *val has value
+ * -1 The string was empty or NULL
+ * -2 The string had invalid syntax
+ */
+int psm3_parse_str_uint(const char *string, unsigned int *val);
+
+/** @brief PSM2 yesno parameter parsing
+ *
+ * Function that parses a string yesno parameter
+ *
+ * @param[in] const char *str parameter value
+ * @retval -1 The string was empty or NULL
+ * -2 The string had invalid syntax
+ * 0  The string was No, False, Off or 0
+ * 1  The string was Yes, True, On or 1
+ */
+int psm3_parse_str_yesno(const char *str);
+
+/** @brief PSM2 env finalize
+ *
+ * Function that frees memory from psm3_env_initialize
+ * Only need to call if don't call psm3_finalize
+ */
+void psm3_env_finalize(void);
+
+/** @brief PSM2 env query
+ *
+ * Function that allows the wrapper provider to get PSM env variables
+ * including checks of the /etc/psm3.conf file.  Purposely structured
+ * similar to fi_param_get_* for easier use in psmx3 wrapper
+ *
+ * @param[in] const char *name parameter name
+ * @param[in] const char *descr parameter description (help text)
+ * @param[in] int visible  is parameter user visible (1) or hidden (0)
+ * @param[out] value  where to put value, also holds default value on input
+ *
+ * @retval 0 The value buffer has successfully been written with the
+ * value for the parameter
+ * 		   1 The default value was used, *value was unchanged
+ */
+int psm3_getenv_int(const char *name, const char *descr, int visible,
+				int *value);
+int psm3_getenv_bool(const char *name, const char *descr, int visible,
+				int *value);
+int psm3_getenv_str(const char *name, const char *descr, int visible,
+				char **value);
+
+/** @brief PSM3 memory copy
+ *
+ * Function that copies data from source to destination. Either dest or
+ * src could be GPU buffer, but not both.
+ *
+ * @param[out] void *dest parameter destination buffer pointer
+ * @param[in] const void *src parameter source buffer pointer
+ * @param[in] unint32_t parameter copy length
+ */
+void psm3_memcpy(void *dest, const void *src, uint32_t len);
 
 /*! @} */
 

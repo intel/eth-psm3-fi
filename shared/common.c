@@ -4,6 +4,7 @@
  * Copyright (c) 2013-2018 Intel Corp., Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  * Copyright (c) 2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -84,6 +85,8 @@ struct ofi_common_locks common_locks = {
 };
 
 size_t ofi_universe_size = 1024;
+int ofi_av_remove_cleanup;
+char *ofi_offload_coll_prov_name = NULL;
 
 
 int ofi_genlock_init(struct ofi_genlock *lock,
@@ -439,6 +442,9 @@ sa_sin6:
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
 		break;
+	case FI_ADDR_UCX:
+		size = snprintf(buf, *len, "fi_addr_ucx://%p", addr);
+		break;
 	case FI_ADDR_IB_UD:
 		memset(str, 0, sizeof(str));
 		if (!inet_ntop(AF_INET6, addr, str, INET6_ADDRSTRLEN))
@@ -502,6 +508,8 @@ uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_EFA;
 	else if (!strcasecmp(fmt, "fi_addr_mlx"))
 		return FI_ADDR_MLX;
+	else if (!strcasecmp(fmt, "fi_addr_ucx"))
+		return FI_ADDR_UCX;
 	else if (!strcasecmp(fmt, "fi_addr_ib_ud"))
 		return FI_ADDR_IB_UD;
 
@@ -924,6 +932,7 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	case FI_ADDR_GNI:
 	case FI_ADDR_BGQ:
 	case FI_ADDR_MLX:
+	case FI_ADDR_UCX:
 	default:
 		return -FI_ENOSYS;
 	}
@@ -1138,75 +1147,103 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 }
 
 
-ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
+int ofi_bsock_flush(struct ofi_bsock *bsock)
 {
+	size_t avail;
 	ssize_t ret;
-	int err;
 
 	if (!ofi_bsock_tosend(bsock))
 		return 0;
 
-	ret = ofi_byteq_send(&bsock->sq, bsock->sock);
-	if (ret < 0) {
-		err = ofi_sockerr();
-		if (err == EPIPE)
-			return -FI_ENOTCONN;
-		if (err == EWOULDBLOCK)
-			return -FI_EAGAIN;
-		return -err;
-	}
+	avail = ofi_byteq_readable(&bsock->sq);
+	assert(avail);
+	ret = bsock->sockapi->send(bsock->sockapi, bsock->sock,
+				   &bsock->sq.data[bsock->sq.head],
+				   avail, MSG_NOSIGNAL, &bsock->tx_sockctx);
+	if (ret < 0)
+		return ret;
 
+	ofi_byteq_consume(&bsock->sq, (size_t) ret);
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
 }
 
-ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
+int ofi_bsock_flush_sync(struct ofi_bsock *bsock)
 {
 	size_t avail;
 	ssize_t ret;
+
+	if (!ofi_bsock_tosend(bsock))
+		return 0;
+
+	avail = ofi_byteq_readable(&bsock->sq);
+	assert(avail);
+	ret = ofi_send_socket(bsock->sock, &bsock->sq.data[bsock->sq.head],
+			      avail, MSG_NOSIGNAL);
+	if (ret < 0)
+		return ret;
+
+	ofi_byteq_consume(&bsock->sq, (size_t) ret);
+	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
+}
+
+int ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
+{
+	size_t avail;
+	ssize_t ret;
+	int err;
 
 	avail = ofi_bsock_tosend(bsock);
 	if (avail) {
 		if (*len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, *len);
-			ret = ofi_bsock_flush(bsock);
-			return !ret || ret == -FI_EAGAIN ? *len : ret;
+			err = ofi_bsock_flush(bsock);
+			return !err || err == -FI_EAGAIN ? 0 : err;
 		}
 
-		ret = ofi_bsock_flush(bsock);
-		if (ret)
-			return ret;
+		err = ofi_bsock_flush(bsock);
+		if (err) {
+			*len = 0;
+			return err;
+		}
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
 	if (*len > bsock->zerocopy_size) {
-		ret = ofi_send_socket(bsock->sock, buf, *len,
-				      MSG_NOSIGNAL | OFI_ZEROCOPY);
+		ret = bsock->sockapi->send(bsock->sockapi, bsock->sock, buf, *len,
+					   MSG_NOSIGNAL | OFI_ZEROCOPY,
+					   &bsock->tx_sockctx);
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
-			return -FI_EINPROGRESS;
+			return -OFI_EINPROGRESS_ASYNC;
 		}
 	} else {
-		ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+		ret = bsock->sockapi->send(bsock->sockapi, bsock->sock, buf, *len,
+					   MSG_NOSIGNAL, &bsock->tx_sockctx);
 	}
 	if (ret < 0) {
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
+		if (ret == -OFI_EINPROGRESS_URING)
+			return ret;
+
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ret) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, *len);
-			return *len;
+			return 0;
 		}
-		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
+
+		*len = 0;
+		return ret;
 	}
 	*len = ret;
-	return ret;
+	return 0;
 }
 
-ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
-			size_t cnt, size_t *len)
+int ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
+		    size_t cnt, size_t *len)
 {
-	struct msghdr msg;
 	size_t avail;
 	ssize_t ret;
+	int err;
 
 	if (cnt == 1) {
 		*len = iov[0].iov_len;
@@ -1218,133 +1255,175 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	if (avail) {
 		if (*len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
-			ret = ofi_bsock_flush(bsock);
-			return !ret || ret == -FI_EAGAIN ? *len : ret;
+			err = ofi_bsock_flush(bsock);
+			return !err || err == -FI_EAGAIN ? 0 : err;
 		}
 
-		ret = ofi_bsock_flush(bsock);
-		if (ret)
-			return ret;
+		err = ofi_bsock_flush(bsock);
+		if (err) {
+			*len = 0;
+			return err;
+		}
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = (struct iovec *) iov;
-	msg.msg_iovlen = cnt;
 
 	if (*len > bsock->zerocopy_size) {
-		ret = ofi_sendmsg_tcp(bsock->sock, &msg,
-				      MSG_NOSIGNAL | OFI_ZEROCOPY);
+		ret = bsock->sockapi->sendv(bsock->sockapi, bsock->sock, iov, cnt,
+					    MSG_NOSIGNAL | OFI_ZEROCOPY,
+					    &bsock->tx_sockctx);
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
-			return -FI_EINPROGRESS;
+			return -OFI_EINPROGRESS_ASYNC;
 		}
 	} else {
-		ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		ret = bsock->sockapi->sendv(bsock->sockapi, bsock->sock, iov, cnt,
+					    MSG_NOSIGNAL, &bsock->tx_sockctx);
 	}
 	if (ret < 0) {
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
+		if (ret == -OFI_EINPROGRESS_URING)
+			return ret;
+
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ret) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
-			return *len;
+			return 0;
 		}
-		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
+
+		*len = 0;
+		return ret;
 	}
 	*len = ret;
-	return ret;
+	return 0;
 }
 
-ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
+int ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len)
 {
-	size_t bytes;
+	size_t bytes, avail = 0;
 	ssize_t ret;
 
-	bytes = ofi_byteq_read(&bsock->rq, buf, len);
+	bytes = ofi_byteq_read(&bsock->rq, buf, *len);
 	if (bytes) {
-		if (bytes == len)
-			return len;
+		if (bytes == *len) {
+			return 0;
+		}
+
 		buf = (char *) buf + bytes;
-		len -= bytes;
+		*len -= bytes;
 	}
 
 	assert(!ofi_bsock_readable(bsock));
-	if (len < (bsock->rq.size >> 1)) {
-		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+	if (*len < (bsock->rq.size >> 1)) {
+		avail = ofi_byteq_writeable(&bsock->rq);
+		assert(avail);
+		ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock,
+					   &bsock->rq.data[bsock->rq.tail],
+					   avail, MSG_NOSIGNAL, &bsock->rx_sockctx);
 		if (ret <= 0)
 			goto out;
 
+		ofi_byteq_add(&bsock->rq, (size_t) ret);
 		assert(ofi_bsock_readable(bsock));
-		bytes += ofi_byteq_read(&bsock->rq, buf, len);
-		return bytes;
+		bytes += ofi_byteq_read(&bsock->rq, buf, *len);
+		*len = bytes;
+		return 0;
 	}
 
-	ret = ofi_recv_socket(bsock->sock, buf, len, MSG_NOSIGNAL);
-	if (ret > 0)
-		return bytes + ret;
+	ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock, buf, *len,
+				   MSG_NOSIGNAL, &bsock->rx_sockctx);
+	if (ret > 0) {
+		*len = bytes + ret;
+		return 0;
+	}
 
 out:
-	if (bytes)
-		return bytes;
-	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+	*len = bytes;
+	if (ret == -OFI_EINPROGRESS_URING) {
+		assert(!bsock->async_prefetch);
+		bsock->async_prefetch = avail;
+		return ret;
+	}
+	if (*len)
+		return 0;
+
+	return ret;
 }
 
-ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
+int ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt,
+		    size_t *len)
 {
-	struct msghdr msg;
-	size_t len, bytes;
+	size_t bytes, avail = 0;
 	ssize_t ret;
 
-	if (cnt == 1)
-		return ofi_bsock_recv(bsock, iov[0].iov_base, iov[0].iov_len);
+	if (cnt == 1) {
+		*len = iov[0].iov_len;
+		return ofi_bsock_recv(bsock, iov[0].iov_base, len);
+	}
 
-	len = ofi_total_iov_len(iov, cnt);
+	*len = ofi_total_iov_len(iov, cnt);
 	if (ofi_byteq_readable(&bsock->rq)) {
 		bytes = ofi_byteq_readv(&bsock->rq, iov, cnt, 0);
-		if (bytes == len)
-			return len;
+		if (bytes == *len)
+			return 0;
 
-		len -= bytes;
+		*len -= bytes;
 	} else {
 		bytes = 0;
 	}
 
 	assert(!ofi_bsock_readable(bsock));
-	if (len < (bsock->rq.size >> 1)) {
-		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+	if (*len < (bsock->rq.size >> 1)) {
+		avail = ofi_byteq_writeable(&bsock->rq);
+		assert(avail);
+		ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock,
+					   &bsock->rq.data[bsock->rq.tail],
+					   avail, MSG_NOSIGNAL, &bsock->rx_sockctx);
 		if (ret <= 0)
 			goto out;
 
+		ofi_byteq_add(&bsock->rq, (size_t) ret);
 		assert(ofi_bsock_readable(bsock));
 		bytes += ofi_byteq_readv(&bsock->rq, iov, cnt, bytes);
-		return bytes;
+		*len = bytes;
+		return 0;
 	}
 
 	/* It's too difficult to adjust the iov without copying it, so return
 	 * what data we have.  The caller will consume the iov and retry.
 	 */
-	if (bytes)
-		return bytes;
+	if (bytes) {
+		*len = bytes;
+		return 0;
+	}
 
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = cnt;
-
-	ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
-	if (ret > 0)
-		return ret;
+	ret = bsock->sockapi->recvv(bsock->sockapi, bsock->sock, iov, cnt,
+				    MSG_NOSIGNAL, &bsock->rx_sockctx);
+	if (ret > 0) {
+		*len = ret;
+		return 0;
+	}
 out:
-	if (bytes)
-		return bytes;
-	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+	*len = bytes;
+	if (ret == -OFI_EINPROGRESS_URING) {
+		assert(!bsock->async_prefetch);
+		bsock->async_prefetch = avail;
+		return ret;
+	}
+	if (*len)
+		return 0;
+
+	return ret;
+}
+
+void ofi_bsock_prefetch_done(struct ofi_bsock *bsock, size_t len)
+{
+	assert(ofi_byteq_writeable(&bsock->rq) >= len);
+	assert(bsock->async_prefetch);
+
+	ofi_byteq_add(&bsock->rq, len);
+	assert(ofi_bsock_readable(bsock));
+	bsock->async_prefetch = false;
 }
 
 #ifdef MSG_ZEROCOPY
@@ -1432,7 +1511,6 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 
 	while (pfds->size < size) {
 		ctx[pfds->size].index = -1;
-		ctx[pfds->size].hot_index = -1;
 		fds[pfds->size++].fd = INVALID_SOCKET;
 	}
 
@@ -1782,6 +1860,13 @@ ofi_dynpoll_wait_epoll(struct ofi_dynpoll *dynpoll,
 }
 
 static int
+ofi_dynpoll_get_fd_epoll(struct ofi_dynpoll *dynpoll)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return dynpoll->ep;
+}
+
+static int
 ofi_dynpoll_add_poll(struct ofi_dynpoll *dynpoll, int fd,
 		     uint32_t events, void *context)
 {
@@ -1812,6 +1897,13 @@ ofi_dynpoll_wait_poll(struct ofi_dynpoll *dynpoll,
 	return ofi_pollfds_wait(dynpoll->pfds, events, maxevents, timeout);
 }
 
+static int
+ofi_dynpoll_get_fd_poll(struct ofi_dynpoll *dynpoll)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return INVALID_SOCKET;  /* Unsupported */
+}
+
 void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll)
 {
 	switch (dynpoll->type) {
@@ -1840,6 +1932,7 @@ int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
 		dynpoll->mod = ofi_dynpoll_mod_epoll;
 		dynpoll->del = ofi_dynpoll_del_epoll;
 		dynpoll->wait = ofi_dynpoll_wait_epoll;
+		dynpoll->get_fd = ofi_dynpoll_get_fd_epoll;
 		break;
 	case OFI_DYNPOLL_POLL:
 		ret = ofi_pollfds_create_(&dynpoll->pfds, lock_type);
@@ -1847,6 +1940,7 @@ int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
 		dynpoll->mod = ofi_dynpoll_mod_poll;
 		dynpoll->del = ofi_dynpoll_del_poll;
 		dynpoll->wait = ofi_dynpoll_wait_poll;
+		dynpoll->get_fd = ofi_dynpoll_get_fd_poll;
 		break;
 	default:
 		assert(0);
@@ -2015,6 +2109,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL ||
 			!(ifa->ifa_flags & IFF_UP) ||
+			!(ifa->ifa_flags & IFF_RUNNING) ||
 			(ifa->ifa_flags & IFF_LOOPBACK) ||
 			((ifa->ifa_addr->sa_family != AF_INET) &&
 			(ifa->ifa_addr->sa_family != AF_INET6)))

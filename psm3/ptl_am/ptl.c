@@ -62,7 +62,7 @@
 #include "am_cuda_memhandle_cache.h"
 #endif
 #ifdef PSM_ONEAPI
-#include "am_oneapi_memhandle.h"
+#include "am_oneapi_memhandle_cache.h"
 #endif
 
 /* not reported yet, so just track in a global so can pass a pointer to
@@ -94,9 +94,10 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 #ifdef PSM_CUDA
 	if (req->cuda_ipc_handle_attached) {
 
-		CUdeviceptr cuda_ipc_dev_ptr = am_cuda_memhandle_acquire(req->rts_sbuf - req->cuda_ipc_offset,
-						  (CUipcMemHandle*)&req->cuda_ipc_handle,
-								 req->req_data.recv_msglen,
+		CUdeviceptr cuda_ipc_dev_ptr = am_cuda_memhandle_acquire(
+								 ptl->memhandle_cache,
+								 req->rts_sbuf - req->cuda_ipc_offset,
+								 (CUipcMemHandle*)&req->cuda_ipc_handle,
 								 req->rts_peer->epid);
 		cuda_ipc_dev_ptr = cuda_ipc_dev_ptr + req->cuda_ipc_offset;
 		/* cuMemcpy into the receive side buffer
@@ -110,34 +111,43 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 				req->req_data.recv_msglen);
 		}
 		gpu_ipc_send_completion = 1;
-		am_cuda_memhandle_release(cuda_ipc_dev_ptr - req->cuda_ipc_offset);
+		am_cuda_memhandle_release(ptl->memhandle_cache,
+					cuda_ipc_dev_ptr - req->cuda_ipc_offset);
 		req->cuda_ipc_handle_attached = 0;
 		goto send_cts;
 	}
 #endif
 #ifdef PSM_ONEAPI
-	if (req->ze_ipc_handle_attached) {
-
-		int ipc_fd;
-
-		ze_device_handle_t *ze_ipc_dev_ptr = am_ze_memhandle_acquire(ptl,
-						  req->rts_sbuf - req->ze_ipc_offset, &req->ze_ipc_handle,
-						  req->req_data.recv_msglen, &ipc_fd, req->rts_peer);
-		ze_ipc_dev_ptr = ze_ipc_dev_ptr + req->ze_ipc_offset;
+	if (req->ze_handle_attached) {
+		void *buf_ptr = am_ze_memhandle_acquire(
+						  ptl->memhandle_cache,
+						  req->rts_sbuf - req->ze_ipc_offset, req->ze_handle,
+						  req->rts_peer,
+#ifndef PSM_HAVE_PIDFD
+						  req->ze_device_index, req->ze_alloc_id,
+#else
+						  0, req->ze_alloc_id,
+#endif
+						  req->ze_alloc_type);
+		psmi_assert_always(buf_ptr != NULL);
+		buf_ptr = (uint8_t *)buf_ptr + req->ze_ipc_offset;
 		/* zeMemcpy into the receive side buffer
 		 * based on its location */
+		_HFI_VDBG("Copying src %p (offset 0x%x) dst %p msg_len %u\n",
+			  buf_ptr, req->ze_ipc_offset,
+			  req->req_data.buf, req->req_data.recv_msglen);
 		if (req->is_buf_gpu_mem) {
-			PSM3_GPU_MEMCPY_DTOD(req->req_data.buf, ze_ipc_dev_ptr,
+			PSM3_GPU_MEMCPY_DTOD(req->req_data.buf, buf_ptr,
 				       req->req_data.recv_msglen);
 			PSM3_GPU_SYNCHRONIZE_MEMCPY();
 		} else {
-			PSM3_GPU_MEMCPY_DTOH(req->req_data.buf, ze_ipc_dev_ptr,
+			PSM3_GPU_MEMCPY_DTOH(req->req_data.buf, buf_ptr,
 				req->req_data.recv_msglen);
 		}
 		gpu_ipc_send_completion = 1;
-		am_ze_memhandle_release(ze_ipc_dev_ptr - req->ze_ipc_offset);
-		close(ipc_fd);
-		req->ze_ipc_handle_attached = 0;
+		am_ze_memhandle_release(ptl->memhandle_cache,
+					(uint8_t *)buf_ptr - req->ze_ipc_offset);
+		req->ze_handle_attached = 0;
 		goto send_cts;
 	}
 #endif
@@ -152,11 +162,11 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 		 * resides on the GPU
 		 */
 		if (req->is_buf_gpu_mem) {
-			void* cuda_ipc_bounce_buf = psmi_malloc(PSMI_EP_NONE, UNDEFINED, req->req_data.recv_msglen);
+			void* gpu_ipc_bounce_buf = psmi_malloc(PSMI_EP_NONE, UNDEFINED, req->req_data.recv_msglen);
 			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
-					cuda_ipc_bounce_buf, req->req_data.recv_msglen);
+					gpu_ipc_bounce_buf, req->req_data.recv_msglen);
 			psmi_assert_always(nbytes == req->req_data.recv_msglen);
-			PSM3_GPU_MEMCPY_HTOD(req->req_data.buf, cuda_ipc_bounce_buf,
+			PSM3_GPU_MEMCPY_HTOD(req->req_data.buf, gpu_ipc_bounce_buf,
 				req->req_data.recv_msglen);
 			/* Cuda library has recent optimizations where they do
 			 * not guarantee synchronus nature for Host to Device
@@ -164,7 +174,7 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 			 * and synchronize calls are to guarentee completion.
 			 */
 			PSM3_GPU_SYNCHRONIZE_MEMCPY();
-			psmi_free(cuda_ipc_bounce_buf);
+			psmi_free(gpu_ipc_bounce_buf);
 		} else {
 			/* cma can be done in handler context or not. */
 			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
@@ -266,7 +276,11 @@ psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	default:{
 			void *sreq = (void *)(uintptr_t) args[3].u64w0;
 			uintptr_t sbuf = (uintptr_t) args[4].u64w0;
+#ifdef PSM_ONEAPI
+			psmi_assert(narg == 5 || narg == 6);
+#else
 			psmi_assert(narg == 5);
+#endif
 			psmi_assert_always(opcode == MQ_MSG_LONGRTS);
 			rc = psm3_mq_handle_rts(tok->mq, tok->tok.epaddr_incoming,
 						tag, &strat_stats, msglen, NULL, 0, 1,
@@ -292,10 +306,20 @@ psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			 * send from a GPU buffer
 			 */
 			if (buf && len > 0) {
-				req->ze_ipc_handle = *((ze_ipc_mem_handle_t*)buf);
-				req->ze_ipc_handle_attached = 1;
-				req->ze_ipc_offset = args[2].u32w0;
+				am_oneapi_ze_ipc_info_t info;
 
+				psmi_assert(narg == 6);
+				info = (am_oneapi_ze_ipc_info_t)buf;
+				req->ze_handle = info->handle;
+				req->ze_alloc_type = info->alloc_type;
+				req->ze_handle_attached = 1;
+				req->ze_ipc_offset = args[2].u32w0;
+#ifndef PSM_HAVE_PIDFD
+				req->ze_device_index = args[5].u32w0;
+				req->ze_alloc_id = args[5].u32w1;
+#else
+				req->ze_alloc_id = args[5].u64w0;
+#endif
 			}
 #endif
 
@@ -342,8 +366,9 @@ psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	ptl_t *ptl = tok->ptl;
 	psm2_mq_req_t sreq = (psm2_mq_req_t) (uintptr_t) args[0].u64w0;
 #ifdef PSM_CUDA
-	/* If send side req has a cuda ipc handle attached then we can
-	 * assume the data has been copied as soon as we get a CTS
+	/* If send side req has a cuda ipc handle attached then as soon as we
+	 * get a CTS, we can assume the data has been copied and receiver now
+	 * has a reference for the ipc handle for any receiver handle caching
 	 */
 	if (sreq->cuda_ipc_handle_attached) {
 		sreq->cuda_ipc_handle_attached = 0;
@@ -354,11 +379,14 @@ psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	}
 #endif
 #ifdef PSM_ONEAPI
-	/* If send side req has a ze ipc handle attached then we can
-	 * assume the data has been copied as soon as we get a CTS
+	/* If send side req has an ipc handle attached then as soon as we
+	 * get a CTS, we can assume the data has been copied and receiver now
+	 * has a reference for the ipc handle for any receiver handle caching
 	 */
-	if (sreq->ze_ipc_handle_attached) {
-		sreq->ze_ipc_handle_attached = 0;
+	if (sreq->ze_handle_attached) {
+		psm3_put_ipc_handle(sreq->req_data.buf - sreq->ze_ipc_offset,
+							sreq->ipc_handle);
+		sreq->ze_handle_attached = 0;
 		sreq->mq->stats.tx_shm_bytes += sreq->req_data.send_msglen;
 		sreq->mq->stats.tx_rndv_bytes += sreq->req_data.send_msglen;
 		psm3_mq_handle_rts_complete(sreq);

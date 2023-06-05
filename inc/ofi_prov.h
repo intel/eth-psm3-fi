@@ -167,17 +167,6 @@ TCP_INI ;
 #  define TCP_INIT NULL
 #endif
 
-#if (HAVE_NET) && (HAVE_NET_DL)
-#  define XNET_INI FI_EXT_INI
-#  define XNET_INIT NULL
-#elif (HAVE_NET)
-#  define XNET_INI INI_SIG(fi_xnet_ini)
-#  define XNET_INIT fi_xnet_ini()
-XNET_INI ;
-#else
-#  define XNET_INIT NULL
-#endif
-
 #if (HAVE_RXM) && (HAVE_RXM_DL)
 #  define RXM_INI FI_EXT_INI
 #  define RXM_INIT NULL
@@ -237,6 +226,17 @@ SHM_INI ;
 #  define SHM_INIT NULL
 #endif
 
+#if (HAVE_SM2) && (HAVE_SM2_DL)
+#  define SM2_INI FI_EXT_INI
+#  define SM2_INIT NULL
+#elif (HAVE_SM2)
+#  define SM2_INI INI_SIG(fi_sm2_ini)
+#  define SM2_INIT fi_sm2_ini()
+SM2_INI ;
+#else
+#  define SM2_INIT NULL
+#endif
+
 #if (HAVE_MRAIL) && (HAVE_MRAIL_DL)
 #  define MRAIL_INI FI_EXT_INI
 #  define MRAIL_INIT NULL
@@ -268,6 +268,17 @@ RSTREAM_INI ;
 HOOK_PERF_INI ;
 #else
 #  define HOOK_PERF_INIT NULL
+#endif
+
+#if (HAVE_TRACE) && (HAVE_TRACE_DL)
+#  define HOOK_TRACE_INI FI_EXT_INI
+#  define HOOK_TRACE_INIT NULL
+#elif (HAVE_TRACE)
+#  define HOOK_TRACE_INI INI_SIG(fi_hook_trace_ini)
+#  define HOOK_TRACE_INIT fi_hook_trace_ini()
+HOOK_TRACE_INI ;
+#else
+#  define HOOK_TRACE_INIT NULL
 #endif
 
 #if (HAVE_HOOK_DEBUG) && (HAVE_HOOK_DEBUG_DL)
@@ -317,5 +328,21 @@ OPX_INI ;
 #else
 #  define OPX_INIT NULL
 #endif
+
+#if (HAVE_UCX) && (HAVE_UCX_DL)
+#  define UCX_INI FI_EXT_INI
+#  define UCX_INIT NULL
+#elif (HAVE_UCX)
+#  define UCX_INI INI_SIG(fi_ucx_ini)
+#  define UCX_INIT fi_ucx_ini()
+UCX_INI ;
+#else
+#  define UCX_INIT NULL
+#endif
+
+/* the utility collective provider is always enabled and built-in */
+#define COLL_INI INI_SIG(fi_coll_ini)
+#define COLL_INIT fi_coll_ini()
+COLL_INI ;
 
 #endif /* _OFI_PROV_H_ */

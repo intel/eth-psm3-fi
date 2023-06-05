@@ -101,7 +101,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 			uint8_t is_aux)
 {
 	int flags;
-	struct sockaddr_in6 loc_addr;
+	psm3_sockaddr_in_t loc_addr;
 	socklen_t addr_len;
 	union psmi_envvar_val env_bdev;
 	union psmi_envvar_val env_gso, env_gro;
@@ -326,7 +326,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 		_HFI_ERROR("Failed to query UDP socket address for %s: %s\n", ep->dev_name, strerror(errno));
 		goto fail;
 	}
-	if (!psmi_ipv6_equal_gid(&loc_addr, ep->gid)) {
+	if (!psmi_ip_equal_gid(&loc_addr, ep->gid)) {
 		_HFI_ERROR("Unexpected mismatch of bound UDP IP address for %s: %s %s\n",
 			ep->dev_name,
 			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
@@ -334,10 +334,11 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 		goto fail;
 	}
 	if (is_aux) {
-		ep->sockets_ep.aux_socket = __be16_to_cpu(loc_addr.sin6_port);
+		ep->sockets_ep.aux_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
 	} else {
-		ep->sockets_ep.pri_socket = __be16_to_cpu(loc_addr.sin6_port);
+		ep->sockets_ep.pri_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
 	}
+
 	_HFI_PRDBG("bound UDP IP address for %s: %s\n",
 			ep->dev_name,
 			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
@@ -402,6 +403,21 @@ psm2_error_t psm3_tune_tcp_socket(const char *sck_name, psm2_ep_t ep, int fd)
 		_HFI_PRDBG("PSM TCP set %s TCP_QUICKACK\n", sck_name);
 	}
 
+	struct linger lg;
+	lg.l_onoff = 1;		/* non-zero value enables linger option in kernel */
+        lg.l_linger = 0;	/* timeout interval in seconds */
+	if (-1 == setsockopt( fd, SOL_SOCKET, SO_LINGER, (void *)&lg, sizeof(lg))) {
+		_HFI_ERROR("Failed set %s SO_LINGER for %s: %s\n", sck_name, ep->dev_name, strerror(errno));
+	} else {
+		_HFI_PRDBG("PSM TCP set %s SO_LINGER\n", sck_name);
+	}
+	if (psm3_parse_tcp_reuseport()) {
+		if (-1 == setsockopt( fd, SOL_SOCKET, SO_REUSEPORT, (void *)&flag, sizeof(flag))) {
+			_HFI_ERROR("Failed set %s SO_REUSEPORTfor %s: %s\n", sck_name, ep->dev_name, strerror(errno));
+		} else {
+			_HFI_PRDBG("PSM TCP set %s SO_REUSEPORT\n", sck_name);
+		}
+	}
 	psm3_getenv("PSM3_TCP_REUSEADDR",
 		"Set TCP socket SO_REUSEADDR for more rapid listener socket reuse",
 		PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
@@ -538,7 +554,9 @@ fail:
 }
 
 static __inline__
-psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr, socklen_t addrlen)
+psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd,
+	psm3_sockaddr_in_t *addr,
+	socklen_t addrlen)
 {
 	int i, tcp_backlog = TCP_BACKLOG;
 	long int port;
@@ -551,10 +569,10 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr,
 
 	if (!psm3_getenv("PSM3_TCP_PORT_RANGE",
 		"Set the TCP listener port range <low:high>. The listener will bind to a random port in the range. '0:0'=let OS pick.",
-		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
 		(union psmi_envvar_val) range_def, &env_val)) {
 		/* not using default values */
-		psm3_parse_str_tuples(env_val.e_str, 2, tvals);
+		(void)psm3_parse_str_tuples(env_val.e_str, 2, tvals);
 	}
 
 	_HFI_DBG("PSM3_TCP_PORT_RANGE = %d:%d\n", tvals[0], tvals[1]);
@@ -592,7 +610,7 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr,
 			port = start;
 		}
 
-		addr->sin6_port = __cpu_to_be16((uint16_t)port);
+		psm3_socket_port(addr) = __cpu_to_be16((uint16_t)port);
 		if (bind(sockfd, (struct sockaddr *)addr, addrlen)) {
 			if (errno == EADDRINUSE || errno == EINVAL) {
 				_HFI_VDBG("Port %ld to bind in use\n", port);
@@ -623,15 +641,42 @@ psm2_error_t
 psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 			psm2_uuid_t const job_key)
 {
-	struct sockaddr_in6 loc_addr;
+	psm3_sockaddr_in_t loc_addr;
 	socklen_t addr_len;
 
+#ifdef PSM_TCP_POLL
 	// one more for listener socket
 	ep->sockets_ep.max_fds = TCP_INI_CONN + 1;
 	ep->sockets_ep.fds = (struct pollfd *) psmi_calloc(
 		ep, NETWORK_BUFFERS, ep->sockets_ep.max_fds, sizeof(struct pollfd));
 	if (ep->sockets_ep.fds == NULL) {
 		_HFI_ERROR( "Unable to allocate memory for pollfd\n");
+		return PSM2_NO_MEMORY;
+	}
+#else
+	ep->sockets_ep.events = psmi_calloc(ep, NETWORK_BUFFERS, TCP_MAX_EVENTS, sizeof(struct epoll_event));
+	if (ep->sockets_ep.events == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for epoll events\n");
+		return PSM2_NO_MEMORY;
+	}
+	ep->sockets_ep.max_fds = TCP_INI_CONN + 1;
+	ep->sockets_ep.fds = (int *) psmi_calloc(
+		ep, NETWORK_BUFFERS, ep->sockets_ep.max_fds, sizeof(int));
+	if (ep->sockets_ep.fds == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for fds\n");
+		return PSM2_NO_MEMORY;
+	}
+	ep->sockets_ep.efd = epoll_create1 (0);
+	if (ep->sockets_ep.efd == -1) {
+		_HFI_ERROR("Unable to create epoll. %d: %s\n", errno, strerror(errno));
+	}
+#endif
+
+	ep->sockets_ep.max_rfds = TCP_INC_CONN;
+	ep->sockets_ep.rfds = (int *) psmi_calloc(
+		ep, NETWORK_BUFFERS, ep->sockets_ep.max_rfds, sizeof(int));
+	if (ep->sockets_ep.rfds == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for revisit fds\n");
 		return PSM2_NO_MEMORY;
 	}
 
@@ -679,14 +724,14 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 		_HFI_ERROR("Failed to query TCP rx socket address for %s: %s\n", ep->dev_name, strerror(errno));
 		goto fail;
 	}
-	if (!psmi_ipv6_equal_gid(&loc_addr, ep->gid)) {
+	if (!psmi_ip_equal_gid(&loc_addr, ep->gid)) {
 		_HFI_ERROR("Unexpected mismatch of bound TCP IP address for %s: %s %s\n",
 			ep->dev_name,
 			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
 			psm3_ipv6_fmt(ep->gid, 0, 1));
 		goto fail;
 	}
-	ep->sockets_ep.pri_socket = __be16_to_cpu(loc_addr.sin6_port);
+	ep->sockets_ep.pri_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
 	_HFI_PRDBG("TCP socket=%u\n", ep->sockets_ep.pri_socket);
 	PSM2_LOG_MSG("TCP port=%u", ep->sockets_ep.pri_socket);
 
@@ -730,9 +775,9 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 	if (!psm3_getenv("PSM3_TCP_SKIPPOLL_COUNT",
 		"Polls to skip under inactive and active connections <inactive_polls[:active_polls]> "
 		"where inactive_polls >= active_polls.",
-		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
 		(union psmi_envvar_val) buf, &env_val)) {
-		psm3_parse_str_tuples(env_val.e_str, 2, tvals);
+		(void)psm3_parse_str_tuples(env_val.e_str, 2, tvals);
 		if (tvals[0] < 0) {
 			tvals[0] = TCP_INACT_SKIP_POLLS;
 		}
@@ -776,8 +821,15 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	loc_info.port_num = ep->portnum;
 
 	ep->rv = psm3_rv_open(ep->dev_name, &loc_info);
-	if (! ep->rv)
-		return PSM2_INTERNAL_ERR;
+	if (! ep->rv) {
+		// if error is due to capability mismatch, loc_info.rdma_mode
+		// has unavailable modes removed
+		if (! loc_info.rdma_mode) {
+			psmi_assert(! (loc_info.capability & RV_CAP_GPU_DIRECT));
+		} else {
+			return PSM2_INTERNAL_ERR;
+		}
+	}
 
 	// parallel hal_gen1/gen1_hal_inline_i.h handling HFI1_CAP_GPUDIRECT_OT
 #ifndef RV_CAP_GPU_DIRECT
@@ -785,6 +837,10 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 #endif
 	if (loc_info.capability & RV_CAP_GPU_DIRECT)
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT);
+	if (loc_info.capability & RV_CAP_NVIDIA_GPU)
+		psmi_hal_add_cap(PSM_HAL_CAP_NVIDIA_GPU);
+	if (loc_info.capability & RV_CAP_INTEL_GPU)
+		psmi_hal_add_cap(PSM_HAL_CAP_INTEL_GPU);
 	// sockets does not support PSM_HAL_CAP_GPUDIRECT_SDMA nor RDMA
 	ep->rv_mr_cache_size = loc_info.mr_cache_size;
 	ep->rv_gpu_cache_size = loc_info.gpu_cache_size;
@@ -848,7 +904,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 #ifdef RNDV_MOD
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/* Open rv only when GPUDirect is enabled */
-	if (psmi_parse_gpudirect() &&
+	if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect() &&
 	    open_rv(ep, job_key) != PSM2_OK) {
 		_HFI_ERROR("Unable to open rv for port %d of %s.\n",
 			   port, ep->dev_name);
@@ -860,6 +916,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 #endif /* RNDV_MOD */
 	ep->wiremode = 0; // TCP vs UDP are separate EPID protocols
 	ep->addr_index = addr_index;
+	psmi_hal_add_cap(PSM_HAL_CAP_NIC_LOOPBACK);
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		// TCP requires packets be multiple of 32b because in tcp_recv
 		// PSM uses the lrh[2] pkt size (multiple of 32b) to decide how
@@ -914,7 +971,9 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 			if (env_mtu.e_int >= IBTA_MTU_MIN && env_mtu.e_int <= OPA_MTU_MAX) //enum
 				env_mtu.e_int = opa_mtu_enum_to_int((enum opa_mtu)env_mtu.e_int);
 			else if (env_mtu.e_int < IBTA_MTU_MIN) // pick default
-				env_mtu.e_int = ep->mtu; // use wire mtu
+				env_mtu.e_int = ep->mtu & 0xfffffffc; // use wire mtu
+			else
+				env_mtu.e_int = env_mtu.e_int & 0xfffffffc;
           
 			if (env_mtu.e_int > TCP_MAX_MTU)
 				env_mtu.e_int = TCP_MAX_MTU;
@@ -1115,21 +1174,28 @@ psm2_error_t psm3_sockets_ips_proto_update_linkinfo(struct ips_proto *proto)
 
 int psm3_sockets_poll_type(int poll_type, psm2_ep_t ep)
 {
-	//if (poll_type == PSMI_HAL_POLL_TYPE_URGENT) {
-	if (poll_type) {
-		// TBD set for event on solicted recv
-		_HFI_PRDBG("enable solicited event\n");
-#if 0
-	} else if (poll_type = PSMI_HAL_POLL_TYPE_ANYRCV) {
-		// set for event on all recv completions
-		psmi_assert_always(0);	// not used by PSM
-#endif
-	} else {
+	switch (poll_type) {
+	case PSMI_HAL_POLL_TYPE_NONE:
 		// no events for solicted and unsolictited recv
 		_HFI_PRDBG("disable solicited event - noop\n");
 		// this is only done once during PSM shutdown of rcvthread.
-		// TBD
+		break;
+	case PSMI_HAL_POLL_TYPE_URGENT:
+		// set for event on solicted recv (urgent PSM protocol pkts)
+		_HFI_PRDBG("enable solicited event\n");
+		// TBD - sockets does not yet implement urgent interrupt wakeup
+		// for rcvThread.  TBD if can do that with sockets
+		break;
+	case PSMI_HAL_POLL_TYPE_ANYRCV:
+		//_HFI_VDBG("enable all events\n");
+		// TBD if we want to implement this need sockets pollintr to
+		// wait on the actual sockets, perhaps an ep_poll
+		return -1;
+		break;
+	default:
+		return -1;
 	}
+
 	return 0;
 }
 
@@ -1139,16 +1205,36 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP
 		&& ep->sockets_ep.fds) {
 		int i, fd;
-		for (i = 0; i < ep->sockets_ep.nfds; i++) {
+#ifdef PSM_TCP_POLL
+		for (i = ep->sockets_ep.nfds - 1; i >= 0; i--) {
 			if (ep->sockets_ep.fds[i].fd > 0) {
 				fd = ep->sockets_ep.fds[i].fd;
 				psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
 				_HFI_VDBG("Closed fd=%d\n", fd);
 			}
 		}
+#else
+		if (ep->sockets_ep.efd > 0) {
+			close(ep->sockets_ep.efd);
+		}
+		for (i = ep->sockets_ep.nfds - 1; i >= 0; i--) {
+			if (ep->sockets_ep.fds[i] > 0) {
+				fd = ep->sockets_ep.fds[i];
+				psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
+				_HFI_VDBG("Closed fd=%d\n", fd);
+			}
+		}
+		if (ep->sockets_ep.events) {
+			psmi_free(ep->sockets_ep.events);
+		}
+#endif
 		psmi_free(ep->sockets_ep.fds);
 		ep->sockets_ep.fds = NULL;
 		ep->sockets_ep.nfds = 0;
+
+		psmi_free(ep->sockets_ep.rfds);
+		ep->sockets_ep.rfds = NULL;
+		ep->sockets_ep.nrfd = 0;
 
 		// Just free map, as we do not need it anymore
 		if (ep->sockets_ep.map_fds) {
@@ -1221,7 +1307,7 @@ static psm2_error_t udp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 	int err = PSM2_OK;
 	struct ifreq ifrt;
 
-	ep->sockets_ep.udp_tx_fd = socket(AF_INET6, SOCK_DGRAM, 0);
+	ep->sockets_ep.udp_tx_fd = socket(psm3_socket_domain, SOCK_DGRAM, 0);
 	// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
 	// sure we didn't end up with 0 (stdin should have 0)
 	if (ep->sockets_ep.udp_tx_fd == 0) {
@@ -1235,7 +1321,7 @@ static psm2_error_t udp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 		goto fail;
 	}
 
-	ep->sockets_ep.udp_rx_fd = socket(AF_INET6, SOCK_DGRAM, 0);
+	ep->sockets_ep.udp_rx_fd = socket(psm3_socket_domain, SOCK_DGRAM, 0);
 	// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
 	// sure we didn't end up with 0 (stdin should have 0)
 	if (ep->sockets_ep.udp_rx_fd == 0) {
@@ -1249,7 +1335,7 @@ static psm2_error_t udp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 		goto fail;
 	}
 
-	ifrt.ifr_addr.sa_family = AF_INET6;	// TBD if this used?
+	ifrt.ifr_addr.sa_family = psm3_socket_domain;	// TBD if this used?
 	strncpy(ifrt.ifr_name, ep->dev_name, IFNAMSIZ-1);
 	_HFI_PRDBG("Querying %s.\n",ep->dev_name);
 	if (-1 == ioctl(ep->sockets_ep.udp_rx_fd, SIOCGIFMTU, &ifrt)) {
@@ -1293,7 +1379,7 @@ static psm2_error_t tcp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 	int err = PSM2_OK;
 	struct ifreq ifrt;
 
-	ep->sockets_ep.listener_fd = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	ep->sockets_ep.listener_fd = socket(psm3_socket_domain, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
 	// sure we didn't end up with 0 (stdin should have 0)
 	if (ep->sockets_ep.listener_fd == 0) {
@@ -1306,7 +1392,7 @@ static psm2_error_t tcp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 		err = PSM2_INTERNAL_ERR;
 		goto fail;
 	}
-	ifrt.ifr_addr.sa_family = AF_INET6;
+	ifrt.ifr_addr.sa_family = psm3_socket_domain;
 	strncpy(ifrt.ifr_name, ep->dev_name, IFNAMSIZ-1);
 	_HFI_PRDBG("Querying %s.\n",ep->dev_name);
 	if (-1 == ioctl(ep->sockets_ep.listener_fd, SIOCGIFMTU, &ifrt)) {
@@ -1327,18 +1413,11 @@ static psm2_error_t tcp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 
 done:
 	if (ep->sockets_ep.listener_fd > 0) {
-		ep->sockets_ep.fds[0].fd = ep->sockets_ep.listener_fd;
-		ep->sockets_ep.fds[0].events = POLLIN;
-		ep->sockets_ep.nfds = 1;
-		psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.listener_fd, 0, 1);
+		psm3_sockets_tcp_add_fd(ep, ep->sockets_ep.listener_fd, FD_STATE_ESTABLISHED);
 
 	}
 	if (ep->sockets_ep.udp_rx_fd > 0) {
-		ep->sockets_ep.fds[ep->sockets_ep.nfds].fd = ep->sockets_ep.udp_rx_fd;
-		ep->sockets_ep.fds[ep->sockets_ep.nfds].events = POLLIN;
-                psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.udp_rx_fd, 
-				ep->sockets_ep.nfds, 1);
-		ep->sockets_ep.nfds += 1;
+		psm3_sockets_tcp_add_fd(ep, ep->sockets_ep.udp_rx_fd, FD_STATE_ESTABLISHED);
 	}
 	ep->sockets_ep.tcp_incoming_fd = 0;
 	return err;
@@ -1399,7 +1478,7 @@ psm3_dump_sockets_ep(psm2_ep_t ep)
 	printf("socket  = %u\n", uep->pri_socket);
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		printf("aux socket = %u\n", uep->aux_socket);
-		printf("nfds    = %u\n", uep->nfds);
+		printf("nfds = %u\n", uep->nfds);
 	}
 }
 

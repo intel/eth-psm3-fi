@@ -690,33 +690,35 @@ psm2_error_t psm3_verbs_ips_path_rec_init(struct ips_proto *proto,
 
 int psm3_verbs_poll_type(int poll_type, psm2_ep_t ep)
 {
-	//if (poll_type == PSMI_HAL_POLL_TYPE_URGENT) {
-	if (poll_type) {
-		// set for event on solicted recv
+	switch (poll_type) {
+	case PSMI_HAL_POLL_TYPE_NONE:
+		// no events for solicted and unsolictited recv
+		_HFI_PRDBG("disable solicited event - noop\n");
+		// this is only done once during PSM shutdown of rcvthread.
+		// Verbs events are one-shots.  No way to disable.  However once PSM
+		// stops rcvthread shortly after this call, no one will be polling
+		// for these events so worst case only a few additional events occur
+		break;
+	case PSMI_HAL_POLL_TYPE_URGENT:
+		// set for event on solicted recv (urgent PSM protocol pkts)
 		_HFI_PRDBG("enable solicited event\n");
 		if (0 != ibv_req_notify_cq(ep->verbs_ep.recv_cq, 1)) {
 			_HFI_ERROR("Can't request solicitied RQ events on %s: %s\n",
 							ep->dev_name, strerror(errno));
 			return -1;
 		}
-#if 0
-	} else if (poll_type = PSMI_HAL_POLL_TYPE_ANYRCV) {
-		// set for event on all recv completions
-		psmi_assert_always(0);	// not used by PSM
+		break;
+	case PSMI_HAL_POLL_TYPE_ANYRCV:
+		_HFI_VDBG("enable all events\n");
 		if (0 != ibv_req_notify_cq(ep->verbs_ep.recv_cq, 0)) {
 			_HFI_ERROR("Can't request all RQ events on %s: %s\n",
 							ep->dev_name, strerror(errno));
 			return -1;
 		}
-#endif
-	} else {
-		// no events for solicted and unsolictited recv
-		_HFI_PRDBG("disable solicited event - noop\n");
-		// this is only done once during PSM shutdown of rcvthread.
-		// Verbs events are one-shots.  No way to disable.  However once
-		// PSM stops rcvthread shortly after this call, no one will be
-		// polling for these events so worst case only 1 additional event
-		// occurs and does not get reenabled.
+		break;
+	default:
+		psmi_assert(0);
+		return -1;
 	}
 	return 0;
 }
@@ -743,11 +745,9 @@ void psm3_ep_free_verbs(psm2_ep_t ep)
 		ibv_destroy_cq(ep->verbs_ep.send_cq);
 		ep->verbs_ep.send_cq = NULL;
 	}
-	if (ep->verbs_ep.pd) {
-		ibv_dealloc_pd(ep->verbs_ep.pd);
-		ep->verbs_ep.pd = NULL;
-	}
 #ifdef RNDV_MOD
+	// must close rv prior to dealloc pd or closing device in case
+	// MR_CACHE_MODE_KERNEL with user MRs in RV cache
 	if (ep->rv) {
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)) {
 			deregister_rv_conn_stats(ep);
@@ -757,12 +757,10 @@ void psm3_ep_free_verbs(psm2_ep_t ep)
 		ep->rv = NULL;
 	}
 #endif
-#ifdef UMR_CACHE
-	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
-		if (ep->verbs_ep.umrc.fd)
-			psm3_verbs_umrc_stop(&ep->verbs_ep.umrc);
+	if (ep->verbs_ep.pd) {
+		ibv_dealloc_pd(ep->verbs_ep.pd);
+		ep->verbs_ep.pd = NULL;
 	}
-#endif
 	if (ep->verbs_ep.context) {
 		ibv_close_device(ep->verbs_ep.context);
 		ep->verbs_ep.context = NULL;
@@ -1630,75 +1628,235 @@ static void register_rv_conn_stats(psm2_ep_t ep)
 	struct psm3_rv_conn_stats *ep_rv_conn_stats = &ep->verbs_ep.rv_conn_stats;
 
 	struct psmi_stats_entry entries[] = {
-		PSMI_STATS_DECL("rv_q_depth", MPSPAWN_STATS_REDUCTION_ALL,
+		PSMI_STATS_DECL_HELP("RV Configuration Settings:"),
+		PSMI_STATS_DECL("rv_q_depth",
+				"Size of QPs and CQs per RV QP",
+				MPSPAWN_STATS_REDUCTION_ALL,
 				rv_q_depth, NULL),
-		PSMI_STATS_DECL("rv_reconnect_timeout", MPSPAWN_STATS_REDUCTION_ALL,
+		PSMI_STATS_DECL("rv_reconnect_timeout",
+				"RV End-point minimum re-connection timeout in seconds",
+				 MPSPAWN_STATS_REDUCTION_ALL,
 				rv_reconnect_timeout, NULL),
-		PSMI_STATS_DECL("rv_hb_interval", MPSPAWN_STATS_REDUCTION_ALL,
+		PSMI_STATS_DECL("rv_hb_interval",
+				"RV End-point heartbeat interval in milliseconds",
+				MPSPAWN_STATS_REDUCTION_ALL,
 				rv_hb_interval, NULL),
-		PSMI_STATS_DECL("rv_index", MPSPAWN_STATS_REDUCTION_ALL,
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV Connection Statistics:"),
+		PSMI_STATS_DECL("rv_index",
+				"RV unique end point index within job on given NIC",
+				MPSPAWN_STATS_REDUCTION_ALL,
 				rv_index, NULL),
-
-		PSMI_STATS_DECL("rv_conn_flags", MPSPAWN_STATS_REDUCTION_ALL,
+		PSMI_STATS_DECL("rv_conn_flags",
+				"RV_CONN_STAT flags (1=server, 2=client, 4=was connected)",
+				MPSPAWN_STATS_REDUCTION_ALL,
 				rv_conn_flags, NULL),
-
-		PSMI_STATS_DECL_FUNC("num_conn", rv_conn_num_conn),
-		PSMI_STATS_DECL_FUNC("req_error", rv_conn_req_error),
-		PSMI_STATS_DECL_FUNC("req_recv", rv_conn_req_recv),
-		PSMI_STATS_DECL_FUNC("rep_error", rv_conn_rep_error),
-		PSMI_STATS_DECL_FUNC("rep_recv", rv_conn_rep_recv),
-		PSMI_STATS_DECL_FUNC("rtu_recv", rv_conn_rtu_recv),
-		PSMI_STATS_DECL_FUNC("established", rv_conn_established),
-		PSMI_STATS_DECL_FUNC("dreq_error", rv_conn_dreq_error),
-		PSMI_STATS_DECL_FUNC("dreq_recv", rv_conn_dreq_recv),
-		PSMI_STATS_DECL_FUNC("drep_recv", rv_conn_drep_recv),
-		PSMI_STATS_DECL_FUNC("timewait", rv_conn_timewait),
-		PSMI_STATS_DECL_FUNC("mra_recv", rv_conn_mra_recv),
-		PSMI_STATS_DECL_FUNC("rej_recv", rv_conn_rej_recv),
-		PSMI_STATS_DECL_FUNC("lap_error", rv_conn_lap_error),
-		PSMI_STATS_DECL_FUNC("lap_recv", rv_conn_lap_recv),
-		PSMI_STATS_DECL_FUNC("apr_recv", rv_conn_apr_recv),
-		PSMI_STATS_DECL_FUNC("unexp_event", rv_conn_unexp_event),
-		PSMI_STATS_DECL_FUNC("req_sent", rv_conn_req_sent),
-		PSMI_STATS_DECL_FUNC("rep_sent", rv_conn_rep_sent),
-		PSMI_STATS_DECL_FUNC("rtu_sent", rv_conn_rtu_sent),
-		PSMI_STATS_DECL_FUNC("rej_sent", rv_conn_rej_sent),
-		PSMI_STATS_DECL_FUNC("dreq_sent", rv_conn_dreq_sent),
-		PSMI_STATS_DECL_FUNC("drep_sent", rv_conn_drep_sent),
-		PSMI_STATS_DECLU64("wait_time", (uint64_t*)&ep_rv_conn_stats->wait_time),
-		PSMI_STATS_DECLU64("resolve_time", (uint64_t*)&ep_rv_conn_stats->resolve_time),
-		PSMI_STATS_DECLU64("connect_time", (uint64_t*)&ep_rv_conn_stats->connect_time),
-		PSMI_STATS_DECLU64("connected_time", (uint64_t*)&ep_rv_conn_stats->connected_time),
-		PSMI_STATS_DECL_FUNC("resolve", rv_conn_resolve),
-		PSMI_STATS_DECL_FUNC("resolve_fail", rv_conn_resolve_fail),
-		PSMI_STATS_DECL_FUNC("conn_recovery", rv_conn_conn_recovery),
-		PSMI_STATS_DECLU64("rewait_time", (uint64_t*)&ep_rv_conn_stats->rewait_time),
-		PSMI_STATS_DECLU64("reresolve_time", (uint64_t*)&ep_rv_conn_stats->reresolve_time),
-		PSMI_STATS_DECLU64("reconnect_time", (uint64_t*)&ep_rv_conn_stats->reconnect_time),
-		PSMI_STATS_DECLU64("max_rewait_time", (uint64_t*)&ep_rv_conn_stats->max_rewait_time),
-		PSMI_STATS_DECLU64("max_reresolve_time", (uint64_t*)&ep_rv_conn_stats->max_reresolve_time),
-		PSMI_STATS_DECLU64("max_reconnect_time", (uint64_t*)&ep_rv_conn_stats->max_reconnect_time),
-		PSMI_STATS_DECL_FUNC("reresolve", rv_conn_reresolve),
-		PSMI_STATS_DECL_FUNC("reresolve_fail", rv_conn_reresolve_fail),
-		PSMI_STATS_DECLU64("post_write", (uint64_t*)&ep_rv_conn_stats->post_write),
-		PSMI_STATS_DECLU64("post_write_fail", (uint64_t*)&ep_rv_conn_stats->post_write_fail),
-		PSMI_STATS_DECLU64("post_write_bytes", (uint64_t*)&ep_rv_conn_stats->post_write_bytes),
-		PSMI_STATS_DECL_FUNC("send_write_out", rv_conn_outstand_send_write),
-		PSMI_STATS_DECLU64("send_write_cqe", (uint64_t*)&ep_rv_conn_stats->send_write_cqe),
-		PSMI_STATS_DECLU64("send_write_cqe_fail", (uint64_t*)&ep_rv_conn_stats->send_write_cqe_fail),
-
-		PSMI_STATS_DECLU64("recv_write_cqe", (uint64_t*)&ep_rv_conn_stats->recv_write_cqe),
-		PSMI_STATS_DECLU64("recv_write_bytes", (uint64_t*)&ep_rv_conn_stats->recv_write_bytes),
-		PSMI_STATS_DECLU64("recv_cqe_fail", (uint64_t*)&ep_rv_conn_stats->recv_cqe_fail),
-
-		PSMI_STATS_DECLU64("post_hb", (uint64_t*)&ep_rv_conn_stats->post_hb),
-		PSMI_STATS_DECLU64("post_hb_fail", (uint64_t*)&ep_rv_conn_stats->post_hb_fail),
-		PSMI_STATS_DECLU64("send_hb_cqe", (uint64_t*)&ep_rv_conn_stats->send_hb_cqe),
-		PSMI_STATS_DECLU64("send_hb_cqe_fail", (uint64_t*)&ep_rv_conn_stats->send_hb_cqe_fail),
-		PSMI_STATS_DECLU64("recv_hb_cqe", (uint64_t*)&ep_rv_conn_stats->recv_hb_cqe),
+		PSMI_STATS_DECL_FUNC("num_conn",
+				"RV Total QPs shared with this process",
+				rv_conn_num_conn),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV CM Total Event Counts:\n"
+			"The CM connection protocol uses a Request (REQ), "
+			"Reply (REP) and Ready-to-Use (RTU).  If data arrives "
+			"prior to the RTU, ib_cm_notify can report connection "
+			"established.\n"
+			"Connection attempts may be Rejected (REJ).\n"
+			"The CM disconnect protocol uses a Request (DREQ) "
+			"and Reply (DREP).\n"
+			"After a disconnect, a timewait occurs before the QP "
+			"can be reused, however RV avoids this delay by using a fresh QP.\n"
+			"A Message Request Ack (MRA) may be used to ack any "
+			"message if the recipient anticipates a slow response.\n"
+			"A connection can change it's path via Load "
+			"Alternate Path (LAP) and Alternate Path Response (APR)."),
+		PSMI_STATS_DECL_FUNC("req_error",
+				"Connection REQ errors",
+				rv_conn_req_error),
+		PSMI_STATS_DECL_FUNC("req_recv",
+				"Connection REQ received",
+				rv_conn_req_recv),
+		PSMI_STATS_DECL_FUNC("rep_error",
+				"Connection REP errors",
+				rv_conn_rep_error),
+		PSMI_STATS_DECL_FUNC("rep_recv",
+				"Connection REP received",
+				rv_conn_rep_recv),
+		PSMI_STATS_DECL_FUNC("rtu_recv",
+				"Connection RTU received",
+				rv_conn_rtu_recv),
+		PSMI_STATS_DECL_FUNC("established",
+				"Connection established reported via ib_cm_notify",
+				rv_conn_established),
+		PSMI_STATS_DECL_FUNC("dreq_error",
+				"Disconnect DREQ errors",
+				rv_conn_dreq_error),
+		PSMI_STATS_DECL_FUNC("dreq_recv",
+				"Disconnect DREQ received",
+				rv_conn_dreq_recv),
+		PSMI_STATS_DECL_FUNC("drep_recv",
+				"Disconnect DREP received",
+				rv_conn_drep_recv),
+		PSMI_STATS_DECL_FUNC("timewait",
+				"Timewait exit events",
+				rv_conn_timewait),
+		PSMI_STATS_DECL_FUNC("mra_recv",
+				"MRA received (Message Receipt Ack)",
+				rv_conn_mra_recv),
+		PSMI_STATS_DECL_FUNC("rej_recv",
+				"Connection REJ received",
+				rv_conn_rej_recv),
+		PSMI_STATS_DECL_FUNC("lap_error",
+				"LAP errors (Load Alternate Path)",
+				rv_conn_lap_error),
+		PSMI_STATS_DECL_FUNC("lap_recv",
+				"LAP received (Load Alternate Path)",
+				rv_conn_lap_recv),
+		PSMI_STATS_DECL_FUNC("apr_recv",
+				"APR received (Alternate Path Response)",
+				rv_conn_apr_recv),
+		PSMI_STATS_DECL_FUNC("unexp_event",
+				"Unexpected events from CM",
+				rv_conn_unexp_event),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV Total outbound CM Message Counts:"),
+		PSMI_STATS_DECL_FUNC("req_sent",
+				"Connection REQ sent",
+				rv_conn_req_sent),
+		PSMI_STATS_DECL_FUNC("rep_sent",
+				"Connection REP sent",
+				rv_conn_rep_sent),
+		PSMI_STATS_DECL_FUNC("rtu_sent",
+				"Connection RTU sent",
+				rv_conn_rtu_sent),
+		PSMI_STATS_DECL_FUNC("rej_sent",
+				"Connection REJ sent",
+				rv_conn_rej_sent),
+		PSMI_STATS_DECL_FUNC("dreq_sent",
+				"Disconnect DREQ sent",
+				rv_conn_dreq_sent),
+		PSMI_STATS_DECL_FUNC("drep_sent",
+				"Disconnect DREP sent",
+				rv_conn_drep_sent),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV CM Initial Connection Performance:\n"
+			"The listener (server side) of a connection must wait "
+			"for inbound connections from clients.\n"
+			"A client begins by resolving the address of the "
+			"server and then performing the connection protocol "
+			"starting with the REQ.\n"
+			"Once established, the connection remains connected "
+			"until job end or a connection loss due to comms "
+			"or QP errors.\n"),
+		PSMI_STATS_DECLU64("wait_time",
+				"Maximum microseconds listening for initial connection",
+				(uint64_t*)&ep_rv_conn_stats->wait_time),
+		PSMI_STATS_DECLU64("resolve_time",
+				"Maximum microseconds for initial connection address resolution",
+				(uint64_t*)&ep_rv_conn_stats->resolve_time),
+		PSMI_STATS_DECLU64("connect_time",
+				"Maximum microseconds for initial connection establishment",
+				(uint64_t*)&ep_rv_conn_stats->connect_time),
+		PSMI_STATS_DECLU64("connected_time",
+				"Maximum total microseconds connection was established",
+				(uint64_t*)&ep_rv_conn_stats->connected_time),
+		PSMI_STATS_DECL_FUNC("resolve",
+				"Total address resolution attempts",
+				rv_conn_resolve),
+		PSMI_STATS_DECL_FUNC("resolve_fail",
+				"Total address resolution failures",
+				rv_conn_resolve_fail),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV CM Connection Recovery Performance:\n"
+			"When a connection is lost before job end, RV attempts "
+			"to reestablish it by doing a time wait followed by "
+			"repeatng the address resolution and connection "
+			"protocol."),
+		PSMI_STATS_DECL_FUNC("conn_recovery",
+				"Total successful connection recovery",
+				rv_conn_conn_recovery),
+		PSMI_STATS_DECLU64("rewait_time",
+				"Maximum total microseconds listening for reconnection",
+				(uint64_t*)&ep_rv_conn_stats->rewait_time),
+		PSMI_STATS_DECLU64("reresolve_time",
+				"Maximum total microseconds for reconnection addr resolution",
+				(uint64_t*)&ep_rv_conn_stats->reresolve_time),
+		PSMI_STATS_DECLU64("reconnect_time",
+				"Maximum total microseconds for reconnection establishment",
+				(uint64_t*)&ep_rv_conn_stats->reconnect_time),
+		PSMI_STATS_DECLU64("max_rewait_time",
+				"Maximum microseconds listening for reconnection",
+				(uint64_t*)&ep_rv_conn_stats->max_rewait_time),
+		PSMI_STATS_DECLU64("max_reresolve_time",
+				"Maximum microseconds for reconnection addr resolution",
+				(uint64_t*)&ep_rv_conn_stats->max_reresolve_time),
+		PSMI_STATS_DECLU64("max_reconnect_time",
+				"Maximum microseconds for reconnection establishment",
+				(uint64_t*)&ep_rv_conn_stats->max_reconnect_time),
+		PSMI_STATS_DECL_FUNC("reresolve",
+				"Total address re-resolution attempts",
+				rv_conn_reresolve),
+		PSMI_STATS_DECL_FUNC("reresolve_fail",
+				"Total address re-resolution failures",
+				rv_conn_reresolve_fail),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV outbound RDMA Statistics:\n"
+			"PSM3 transfers rendezvous messages by issuing "
+			"RDMA writes via RV for window size chunks of the message."),
+		PSMI_STATS_DECLU64("post_write",
+				"Total RDMA writes successfully posted",
+				(uint64_t*)&ep_rv_conn_stats->post_write),
+		PSMI_STATS_DECLU64("post_write_fail",
+				"Total RDMA writes failed at time of posting",
+				(uint64_t*)&ep_rv_conn_stats->post_write_fail),
+		PSMI_STATS_DECLU64("post_write_bytes",
+				"Total RDMA write bytes successfully posted",
+				(uint64_t*)&ep_rv_conn_stats->post_write_bytes),
+		PSMI_STATS_DECL_FUNC("send_write_out",
+				"Current RDMA Writes Outstanding",
+				rv_conn_outstand_send_write),
+		PSMI_STATS_DECLU64("send_write_cqe",
+				"Total RDMA write successful completions",
+				(uint64_t*)&ep_rv_conn_stats->send_write_cqe),
+		PSMI_STATS_DECLU64("send_write_cqe_fail",
+				"Total RDMA write failed completions",
+				(uint64_t*)&ep_rv_conn_stats->send_write_cqe_fail),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV inbound RDMA Statistics:"),
+		PSMI_STATS_DECLU64("recv_write_cqe",
+				"Total inbound RDMA write successful completions",
+				(uint64_t*)&ep_rv_conn_stats->recv_write_cqe),
+		PSMI_STATS_DECLU64("recv_write_bytes",
+				"Total inbound RDMA write bytes successfully received",
+				(uint64_t*)&ep_rv_conn_stats->recv_write_bytes),
+		PSMI_STATS_DECLU64("recv_cqe_fail",
+				"Total inbound RDMA write failed completions",
+				(uint64_t*)&ep_rv_conn_stats->recv_cqe_fail),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV outbound Heartbeat Statistics:\n"
+			"In order to detect network disruptions or abnormal "
+			"termination of remote processes in a job, a "
+			"periodic heartbeat is used."),
+		PSMI_STATS_DECLU64("post_hb",
+				"Total heartbeat sends successfully posted",
+				(uint64_t*)&ep_rv_conn_stats->post_hb),
+		PSMI_STATS_DECLU64("post_hb_fail",
+				"Total heartbeat sends failed at time of posting",
+				(uint64_t*)&ep_rv_conn_stats->post_hb_fail),
+		PSMI_STATS_DECLU64("send_hb_cqe",
+				"Total heartbeat send successful completions",
+				(uint64_t*)&ep_rv_conn_stats->send_hb_cqe),
+		PSMI_STATS_DECLU64("send_hb_cqe_fail",
+				"Total heartbeat send failed completions",
+				(uint64_t*)&ep_rv_conn_stats->send_hb_cqe_fail),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV inbound Heartbeat Statistics:"),
+		PSMI_STATS_DECLU64("recv_hb_cqe",
+				"Total heartbeat recv successful completions",
+				(uint64_t*)&ep_rv_conn_stats->recv_hb_cqe),
 	};
 
 	psm3_stats_register_type("RV_Shared_Conn_RDMA_Statistics",
+	    "Kernel RV Stats for all connections/QPs shared with an endpoint in the process",
 					PSMI_STATSTYPE_RV_RDMA,
 					entries,
 					PSMI_HOWMANY(entries),
@@ -1748,16 +1906,33 @@ static void register_rv_event_stats(psm2_ep_t ep)
 	struct psm3_rv_event_stats *ep_rv_event_stats = &ep->verbs_ep.rv_event_stats;
 
 	struct psmi_stats_entry entries[] = {
-		PSMI_STATS_DECL_FUNC("send_write_cqe", rv_send_write_cqe),
-		PSMI_STATS_DECLU64("send_write_cqe_fail", (uint64_t*)&ep_rv_event_stats->send_write_cqe_fail),
-		PSMI_STATS_DECLU64("send_write_bytes", (uint64_t*)&ep_rv_event_stats->send_write_bytes),
-
-		PSMI_STATS_DECLU64("recv_write_cqe", (uint64_t*)&ep_rv_event_stats->recv_write_cqe),
-		PSMI_STATS_DECLU64("recv_write_cqe_fail", (uint64_t*)&ep_rv_event_stats->recv_write_cqe_fail),
-		PSMI_STATS_DECLU64("recv_write_bytes", (uint64_t*)&ep_rv_event_stats->recv_write_bytes),
+		PSMI_STATS_DECL_HELP("RV outbound RDMA Events:"),
+		PSMI_STATS_DECL_FUNC("send_write_cqe",
+				"Total successful RDMA Write completions",
+				rv_send_write_cqe),
+		PSMI_STATS_DECLU64("send_write_cqe_fail",
+				"Total failed RDMA Write completions",
+				(uint64_t*)&ep_rv_event_stats->send_write_cqe_fail),
+		PSMI_STATS_DECLU64("send_write_bytes",
+				"Total RDMA Write bytes successfully sent",
+				(uint64_t*)&ep_rv_event_stats->send_write_bytes),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("RV inbound RDMA Events:"),
+		PSMI_STATS_DECLU64("recv_write_cqe",
+				"Total successful inbound RDMA Write completions",
+				(uint64_t*)&ep_rv_event_stats->recv_write_cqe),
+		PSMI_STATS_DECLU64("recv_write_cqe_fail",
+				"Total failed inbound RDMA Write completions",
+				(uint64_t*)&ep_rv_event_stats->recv_write_cqe_fail),
+		PSMI_STATS_DECLU64("recv_write_bytes",
+				"Total inbound RDMA Write bytes successfully received",
+				(uint64_t*)&ep_rv_event_stats->recv_write_bytes),
 	};
 
 	psm3_stats_register_type("RV_User_Event_Statistics",
+		"Kernel RV Events delivered to user space for an end point in the process.\n"
+		"The RV kernel module reports events to PSM3 for outbound and "
+		"inbound RDMA completions.",
 					PSMI_STATSTYPE_RV_EVENT,
 					entries,
 					PSMI_HOWMANY(entries),
@@ -1857,6 +2032,12 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT_SDMA);
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT_RDMA);
 	}
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (loc_info.capability & RV_CAP_NVIDIA_GPU)
+		psmi_hal_add_cap(PSM_HAL_CAP_NVIDIA_GPU);
+	if (loc_info.capability & RV_CAP_INTEL_GPU)
+		psmi_hal_add_cap(PSM_HAL_CAP_INTEL_GPU);
+#endif
 	ep->verbs_ep.rv_index = loc_info.rv_index;
 	ep->rv_mr_cache_size = loc_info.mr_cache_size;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -1864,6 +2045,11 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 #endif
 	ep->verbs_ep.rv_q_depth = loc_info.q_depth;
 	ep->verbs_ep.rv_reconnect_timeout = loc_info.reconnect_timeout;
+	/* Default for mlx5: 256 MB */
+#define MAX_FMR_SIZE_DEFAULT (64 * 1024 * 4096)
+	ep->verbs_ep.max_fmr_size = loc_info.max_fmr_size;
+	if (!ep->verbs_ep.max_fmr_size)
+		ep->verbs_ep.max_fmr_size = MAX_FMR_SIZE_DEFAULT;
 
 	return PSM2_OK;
 }
@@ -2007,17 +2193,6 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_in
 				psm3_gid128_fmt(ep->gid, 2));
 	}
 
-#ifdef UMR_CACHE
-	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
-		ep->verbs_ep.umrc.ep = ep;
-		err = psm3_verbs_umrc_init(&ep->verbs_ep.umrc, 0);
-		if (err != PSM2_OK) {
-			_HFI_ERROR( "Unable to init MR user cache: %s\n", strerror(err));
-			err = PSM2_INTERNAL_ERR;
-			goto fail;
-		}
-	}
-#endif // UMR_CACHE
 #ifdef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)
 		|| ep->mr_cache_mode == MR_CACHE_MODE_KERNEL ) {
@@ -2041,6 +2216,8 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_in
 		}
 	}
 #endif
+	if (! IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode))
+		psmi_hal_add_cap(PSM_HAL_CAP_NIC_LOOPBACK);
 
 done:
 	if (dev_list)
@@ -2316,7 +2493,7 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 
 	if (cap)
 		*cap = attr.cap;
-	_HFI_MMDBG("created RC QP %d\n", qp->qp_num);
+	_HFI_PRDBG("created RC QP %d\n", qp->qp_num);
 	return qp;
 }
 
@@ -2346,7 +2523,7 @@ psm2_error_t modify_rc_qp_to_init(psm2_ep_t ep, struct ibv_qp *qp)
 					ep->dev_name, strerror(errno));
 		return PSM2_INTERNAL_ERR;
 	}
-	_HFI_MMDBG("moved %d to INIT\n", qp->qp_num);
+	_HFI_PRDBG("moved %d to INIT\n", qp->qp_num);
 	return PSM2_OK;
 }
 
@@ -2381,7 +2558,7 @@ psm2_error_t modify_rc_qp_to_rtr(psm2_ep_t ep, struct ibv_qp *qp,
 					ep->dev_name, strerror(errno));
 		return PSM2_INTERNAL_ERR;
 	}
-	_HFI_MMDBG("moved %d to RTR\n", qp->qp_num);
+	_HFI_PRDBG("moved %d to RTR\n", qp->qp_num);
 
 	return PSM2_OK;
 }
@@ -2407,7 +2584,7 @@ psm2_error_t modify_rc_qp_to_rts(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.timeout = ep->verbs_ep.hfi_qp_timeout;
 	flags |= IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_TIMEOUT;
 
-	_HFI_MMDBG("moving %d to RTS\n", qp->qp_num);
+	_HFI_PRDBG("moving %d to RTS\n", qp->qp_num);
 	if (ibv_modify_qp(qp, &attr, flags)) {
 		_HFI_ERROR( "Failed to modify RC QP to RTS on %s: %s\n",
 						ep->dev_name, strerror(errno));

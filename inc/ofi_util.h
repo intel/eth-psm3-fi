@@ -53,6 +53,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
+#include <rdma/providers/fi_peer.h>
 
 #include <ofi.h>
 #include <ofi_mr.h>
@@ -304,7 +305,7 @@ struct util_ep {
 	ofi_mutex_lock_t	lock_acquire;
 	ofi_mutex_unlock_t	lock_release;
 
-	struct bitmask		*coll_cid_mask;
+	struct ofi_bitmask	*coll_cid_mask;
 	struct slist		coll_ready_queue;
 };
 
@@ -512,15 +513,19 @@ struct util_cq {
 	struct dlist_entry	ep_list;
 	ofi_mutex_t		ep_list_lock;
 	struct ofi_genlock	cq_lock;
+	uint64_t		flags;
 
-	struct util_comp_cirq	*cirq;
-	fi_addr_t		*src;
-
-	struct slist		aux_queue;
-	fi_cq_read_func		read_entry;
 	int			internal_wait;
 	ofi_atomic32_t		wakeup;
 	ofi_cq_progress_func	progress;
+
+	struct fid_peer_cq	*peer_cq;
+
+	/* Only valid if not FI_PEER */
+	struct util_comp_cirq	*cirq;
+	fi_addr_t		*src;
+	struct slist		aux_queue;
+	fi_cq_read_func		read_entry;
 };
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
@@ -610,14 +615,33 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	return ret;
 }
 
-int ofi_cq_insert_error(struct util_cq *cq,
-			const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context);
 int ofi_cq_write_error_trunc(struct util_cq *cq, void *context, uint64_t flags,
 			     size_t len, void *buf, uint64_t data, uint64_t tag,
 			     size_t olen);
+
+static inline int
+ofi_peer_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+		  void *buf, uint64_t data, uint64_t tag, uint64_t src)
+{
+	return cq->peer_cq->owner_ops->write(cq->peer_cq, context, flags, len,
+					     buf, data, tag, src);
+}
+
+static inline int ofi_peer_cq_write_error(struct util_cq *cq,
+		const struct fi_cq_err_entry *err_entry)
+{
+	return cq->peer_cq->owner_ops->writeerr(cq->peer_cq, err_entry);
+}
+
+int ofi_peer_cq_write_error_peek(struct util_cq *cq, uint64_t tag,
+				 void *context);
+
+int ofi_peer_cq_write_error_trunc(struct util_cq *cq, void *context,
+				  uint64_t flags, size_t len, void *buf,
+				  uint64_t data, uint64_t tag, size_t olen);
 
 static inline int ofi_need_completion(uint64_t cq_flags, uint64_t op_flags)
 {
@@ -693,6 +717,7 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
 
 struct util_av;
 struct util_av_set;
+struct util_peer_addr;
 
 struct util_coll_mc {
 	struct fid_mc		mc_fid;
@@ -749,6 +774,8 @@ struct util_av {
 	size_t			context_offset;
 	struct dlist_entry	ep_list;
 	ofi_mutex_t		ep_list_lock;
+	void			(*remove_handler)(struct util_ep *util_ep,
+						  struct util_peer_addr *peer);
 };
 
 #define OFI_AV_DYN_ADDRLEN (1 << 0)
@@ -797,15 +824,20 @@ void util_put_peer(struct util_peer_addr *peer);
  * A future cleanup would be to remove using the util_av and have the
  * rxm_av implementation be independent.
  */
- struct rxm_av {
+struct rxm_av {
 	struct util_av util_av;
 	struct ofi_rbmap addr_map;
 	struct ofi_bufpool *peer_pool;
 	struct ofi_bufpool *conn_pool;
+	struct fid_peer_av peer_av;
+	struct fid_av *util_coll_av;
+	struct fid_av *offload_coll_av;
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		     struct fid_av **fid_av, void *context, size_t conn_size);
+		     struct fid_av **fid_av, void *context, size_t conn_size,
+		     void (*remove_handler)(struct util_ep *util_ep,
+					    struct util_peer_addr *peer));
 size_t rxm_av_max_peers(struct rxm_av *av);
 void rxm_ref_peer(struct util_peer_addr *peer);
 void *rxm_av_alloc_conn(struct rxm_av *av);
@@ -997,6 +1029,7 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		    struct fid *fid);
 void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		     struct fid *fid);
+int fid_list_search(struct dlist_entry *fid_list, struct fid *fid);
 
 
 void ofi_fabric_insert(struct util_fabric *fabric);
@@ -1008,10 +1041,16 @@ void ofi_fabric_remove(struct util_fabric *fabric);
 
 #define OFI_NAME_DELIM	';'
 #define OFI_UTIL_PREFIX "ofi_"
+#define OFI_OFFLOAD_PREFIX "off_"
 
 static inline int ofi_has_util_prefix(const char *str)
 {
 	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
+}
+
+static inline int ofi_has_offload_prefix(const char *str)
+{
+	return !strncasecmp(str, OFI_OFFLOAD_PREFIX, strlen(OFI_OFFLOAD_PREFIX));
 }
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,

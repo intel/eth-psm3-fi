@@ -10,6 +10,9 @@
    */
 #undef ENABLE_DEBUG
 
+/* ZE Support */
+#undef ENABLE_ZE_DLOPEN
+
 /* Define to 1 if the linker supports alias attribute. */
 #undef HAVE_ALIAS_ATTRIBUTE
 
@@ -202,6 +205,12 @@
 /* Ignore HAVE_SHM_DL */
 #undef HAVE_SHM_DL
 
+/* Ignore HAVE_SM2 */
+#undef HAVE_SM2
+
+/* Ignore HAVE_SM2_DL */
+#undef HAVE_SM2_DL
+
 /* Ignore HAVE_SOCKETS */
 #undef HAVE_SOCKETS
 
@@ -223,6 +232,9 @@
 /* Define to 1 if compiler/linker support symbol versioning. */
 #undef HAVE_SYMVER_SUPPORT
 
+/* Ignore HAVE_SYNAPSEAI */
+#undef HAVE_SYNAPSEAI
+
 /* Define to 1 if you have the <sys/auxv.h> header file. */
 #undef HAVE_SYS_AUXV_H
 
@@ -238,8 +250,20 @@
 /* Ignore HAVE_TCP_DL */
 #undef HAVE_TCP_DL
 
+/* Ignore HAVE_TRACE */
+#undef HAVE_TRACE
+
+/* Ignore HAVE_TRACE_DL */
+#undef HAVE_TRACE_DL
+
 /* Define to 1 if typeof works with your compiler. */
 #undef HAVE_TYPEOF
+
+/* Ignore HAVE_UCX */
+#undef HAVE_UCX
+
+/* Ignore HAVE_UCX_DL */
+#undef HAVE_UCX_DL
 
 /* Ignore HAVE_UDP */
 #undef HAVE_UDP

@@ -37,6 +37,7 @@
 #include <unistd.h>
 
 #include <ofi_mr.h>
+#include <ofi_mem.h>
 #include <ofi_hmem.h>
 #include <ofi_enosys.h>
 #include <rdma/fi_ext.h>
@@ -173,6 +174,7 @@ void ofi_monitors_init(void)
 	cuda_monitor->init(cuda_monitor);
 	cuda_ipc_monitor->init(cuda_ipc_monitor);
 	rocr_monitor->init(rocr_monitor);
+	rocr_ipc_monitor->init(rocr_ipc_monitor);
 	ze_monitor->init(ze_monitor);
 	import_monitor->init(import_monitor);
 

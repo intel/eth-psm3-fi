@@ -196,7 +196,7 @@ static void psm3_hfp_verbs_ep_open_opts_get_defaults(struct psm3_ep_open_opts *o
 	opts->imm_size = VERBS_SEND_MAX_INLINE; // PSM header size is 56
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static void psm3_hfp_verbs_gdr_open(void)
 {
 }
@@ -284,7 +284,7 @@ static hfp_verbs_t psm3_verbs_hi = {
 		.hfp_mq_init_defaults			  = psm3_hfp_verbs_mq_init_defaults,
 		.hfp_ep_open_opts_get_defaults		  = psm3_hfp_verbs_ep_open_opts_get_defaults,
 		.hfp_context_initstats			  = psm3_hfp_verbs_context_initstats,
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_open				  = psm3_hfp_verbs_gdr_open,
 #endif
 
@@ -331,9 +331,6 @@ static hfp_verbs_t psm3_verbs_hi = {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = psm3_hfp_verbs_gdr_close,
 		.hfp_gdr_convert_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_convert_gpu_to_host_addr,
-#ifdef PSM_ONEAPI
-		.hfp_gdr_munmap_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_munmap_gpu_to_host_addr,
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = psm3_hfp_verbs_get_port_index2pkey,
 		.hfp_poll_type				  = psm3_hfp_verbs_poll_type,

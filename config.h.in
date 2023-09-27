@@ -325,6 +325,9 @@
 /* CUDA support */
 #undef PSM3_CUDA
 
+/* PSM3 built with instruction set */
+#undef PSM3_MARCH
+
 /* ZE support */
 #undef PSM3_ONEAPI
 

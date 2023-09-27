@@ -836,6 +836,7 @@ PSM3_GIT_HASH = @PSM3_GIT_HASH@
 PSM3_HAL_CNT = @PSM3_HAL_CNT@
 PSM3_HAL_INST = @PSM3_HAL_INST@
 PSM3_IEFS_VERSION = @PSM3_IEFS_VERSION@
+PSM3_MARCH = @PSM3_MARCH@
 PSM3_PROV_VER_MAINT = @PSM3_PROV_VER_MAINT@
 PSM3_PROV_VER_MAJOR = @PSM3_PROV_VER_MAJOR@
 PSM3_PROV_VER_MINOR = @PSM3_PROV_VER_MINOR@
@@ -866,9 +867,6 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 builddir = @builddir@
-cuda_CPPFLAGS = @cuda_CPPFLAGS@
-cuda_LDFLAGS = @cuda_LDFLAGS@
-cuda_LIBS = @cuda_LIBS@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
@@ -902,9 +900,6 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-ze_CPPFLAGS = @ze_CPPFLAGS@
-ze_LDFLAGS = @ze_LDFLAGS@
-ze_LIBS = @ze_LIBS@
 
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.

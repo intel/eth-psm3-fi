@@ -99,7 +99,7 @@ noinst_PROGRAMS =
 @FREEBSD_TRUE@am__append_4 = shared/unix/osd.c inc/freebsd/osd.h \
 @FREEBSD_TRUE@	inc/unix/osd.h
 @LINUX_TRUE@am__append_5 = shared/unix/osd.c shared/linux/osd.c
-@HAVE_LINUX_PERF_RDPMC_TRUE@@HAVE_PSM3_SRC_FALSE@@LINUX_TRUE@am__append_6 = shared/linux/rdpmc.c  #seems to be a copy of psm3/psm_perf.c
+@HAVE_LINUX_PERF_RDPMC_TRUE@@LINUX_TRUE@am__append_6 = shared/linux/rdpmc.c
 @LINUX_TRUE@am__append_7 = inc/linux/rdpmc.h inc/linux/osd.h \
 @LINUX_TRUE@	inc/unix/osd.h
 @HAVE_PSM3_SRC_TRUE@am__append_8 = \
@@ -132,7 +132,7 @@ noinst_PROGRAMS =
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i.la
 
 @HAVE_PSM3_SRC_FALSE@am__append_14 = -lpsm2
-@EMBEDDED_FALSE@am__append_15 = -version-info 22:0:21
+@EMBEDDED_FALSE@am__append_15 = -version-info 24:0:23
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/fi_check_package.m4 \
@@ -249,7 +249,8 @@ am__psm3_libpsm3i_la_SOURCES_DIST = psm3/psm.c psm3/psm_am.c \
 	psm3/psm_log.h psm3/psm_memcpy.c psm3/psm_mock.c \
 	psm3/psm_mpool.c psm3/psm_mpool.h psm3/psm_mq.c \
 	psm3/psm_mq_internal.h psm3/psm_mq_recv.c psm3/psm_mq_utils.c \
-	psm3/psm_netutils.h psm3/psm_oneapi_ze.c psm3/psm_perf.c \
+	psm3/psm_netutils.h psm3/psm_nic_select.c \
+	psm3/psm_nic_select.h psm3/psm_oneapi_ze.c psm3/psm_perf.c \
 	psm3/psm_perf.h psm3/psm_rndv_mod.c psm3/psm_rndv_mod.h \
 	psm3/psm_stats.c psm3/psm_stats.h psm3/psm_sysbuf.c \
 	psm3/psm_sysbuf.h psm3/psm_timer.c psm3/psm_timer.h \
@@ -274,6 +275,7 @@ am__psm3_libpsm3i_la_SOURCES_DIST = psm3/psm.c psm3/psm_am.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq_recv.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq_utils.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_nic_select.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_oneapi_ze.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_perf.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_rndv_mod.lo \
@@ -401,23 +403,26 @@ psm3_libutils_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(psm3_libutils_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 @HAVE_PSM3_SRC_TRUE@am_psm3_libutils_la_rpath =
-am__src_libpsm3_fi_la_SOURCES_DIST = inc/ofi_hmem.h inc/ofi.h \
-	inc/ofi_abi.h inc/ofi_atom.h inc/ofi_enosys.h inc/ofi_file.h \
-	inc/ofi_hook.h inc/ofi_indexer.h inc/ofi_iov.h inc/ofi_list.h \
-	inc/ofi_bitmask.h inc/shared/ofi_str.h inc/ofi_lock.h \
-	inc/ofi_mem.h inc/ofi_osd.h inc/ofi_proto.h inc/ofi_recvwin.h \
-	inc/ofi_rbuf.h inc/ofi_shm.h inc/ofi_signal.h inc/ofi_epoll.h \
+am__src_libpsm3_fi_la_SOURCES_DIST = inc/ofi_hmem.h inc/ofi_cma.h \
+	inc/ofi_xpmem.h inc/ofi.h inc/ofi_abi.h inc/ofi_atom.h \
+	inc/ofi_enosys.h inc/ofi_file.h inc/ofi_hook.h \
+	inc/ofi_indexer.h inc/ofi_iov.h inc/ofi_list.h \
+	inc/ofi_bitmask.h inc/ofi_str.h inc/ofi_lock.h inc/ofi_mem.h \
+	inc/ofi_osd.h inc/ofi_proto.h inc/ofi_recvwin.h inc/ofi_rbuf.h \
+	inc/ofi_shm_p2p.h inc/ofi_signal.h inc/ofi_epoll.h \
 	inc/ofi_tree.h inc/ofi_util.h inc/ofi_atomic.h \
 	inc/ofi_atomic_queue.h inc/ofi_mr.h inc/ofi_net.h \
-	inc/ofi_perf.h inc/ofi_coll.h inc/fasthash.h inc/rbtree.h \
-	inc/uthash.h inc/ofi_prov.h inc/rdma/providers/fi_log.h \
-	inc/rdma/providers/fi_prov.h inc/rdma/providers/fi_peer.h \
-	inc/rdma/fabric.h inc/rdma/fi_atomic.h inc/rdma/fi_cm.h \
-	inc/rdma/fi_collective.h inc/rdma/fi_domain.h inc/rdma/fi_eq.h \
-	inc/rdma/fi_ext.h inc/rdma/fi_rma.h inc/rdma/fi_endpoint.h \
-	inc/rdma/fi_errno.h inc/rdma/fi_tagged.h inc/rdma/fi_trigger.h \
-	src/psmx3.h src/psmx3_am.c src/psmx3_atomic.c src/psmx3_attr.c \
-	src/psmx3_av.c src/psmx3_cm.c src/psmx3_cntr.c src/psmx3_cq.c \
+	inc/ofi_perf.h inc/ofi_coll.h inc/ofi_mb.h inc/fasthash.h \
+	inc/rbtree.h inc/uthash.h inc/ofi_prov.h inc/ofi_profile.h \
+	inc/rdma/providers/fi_log.h inc/rdma/providers/fi_prov.h \
+	inc/rdma/providers/fi_peer.h inc/rdma/fabric.h \
+	inc/rdma/fi_atomic.h inc/rdma/fi_cm.h inc/rdma/fi_collective.h \
+	inc/rdma/fi_domain.h inc/rdma/fi_eq.h inc/rdma/fi_ext.h \
+	inc/rdma/fi_rma.h inc/rdma/fi_endpoint.h inc/rdma/fi_errno.h \
+	inc/rdma/fi_tagged.h inc/rdma/fi_trigger.h \
+	inc/rdma/fi_profile.h src/psmx3.h src/psmx3_am.c \
+	src/psmx3_atomic.c src/psmx3_attr.c src/psmx3_av.c \
+	src/psmx3_cm.c src/psmx3_cntr.c src/psmx3_cq.c \
 	src/psmx3_domain.c src/psmx3_ep.c src/psmx3_fabric.c \
 	src/psmx3_init.c src/psmx3_mr.c src/psmx3_msg.c \
 	src/psmx3_rma.c src/psmx3_tagged.c src/psmx3_trigger.h \
@@ -425,29 +430,32 @@ am__src_libpsm3_fi_la_SOURCES_DIST = inc/ofi_hmem.h inc/ofi.h \
 	src/version.h shared/hmem.c shared/hmem_rocr.c \
 	shared/hmem_cuda.c shared/hmem_cuda_gdrcopy.c shared/hmem_ze.c \
 	shared/hmem_neuron.c shared/hmem_synapseai.c \
-	shared/hmem_ipc_cache.c shared/common.c shared/enosys.c \
-	shared/rbtree.c shared/tree.c shared/fasthash.c \
-	shared/indexer.c shared/mem.c shared/iov.c \
-	shared/shared/ofi_str.c util/src/util_atomic.c \
-	util/src/util_attr.c util/src/util_av.c util/src/util_buf.c \
-	util/src/util_cq.c util/src/util_cntr.c util/src/util_domain.c \
-	util/src/util_ep.c util/src/util_eq.c util/src/util_fabric.c \
-	util/src/util_main.c util/src/util_mem_hooks.c \
-	util/src/util_mem_monitor.c util/src/util_mr_cache.c \
-	util/src/util_mr_map.c util/src/util_ns.c util/src/util_pep.c \
-	util/src/util_poll.c util/src/util_shm.c util/src/util_wait.c \
-	util/src/rxm_av.c util/src/cuda_mem_monitor.c \
-	util/src/cuda_ipc_monitor.c util/src/rocr_mem_monitor.c \
-	util/src/rocr_ipc_monitor.c util/src/ze_mem_monitor.c \
-	shared/osx/osd.c shared/unix/osd.c inc/osx/osd.h \
-	inc/unix/osd.h inc/freebsd/osd.h shared/linux/osd.c \
-	shared/linux/rdpmc.c inc/linux/rdpmc.h inc/linux/osd.h
+	shared/hmem_ipc_cache.c shared/xpmem.c shared/xpmem_cache.c \
+	shared/common.c shared/enosys.c shared/rbtree.c shared/tree.c \
+	shared/fasthash.c shared/indexer.c shared/mem.c shared/iov.c \
+	shared/ofi_str.c util/src/util_atomic.c util/src/util_attr.c \
+	util/src/util_av.c util/src/util_buf.c util/src/util_cq.c \
+	util/src/util_cntr.c util/src/util_domain.c util/src/util_ep.c \
+	util/src/util_eq.c util/src/util_fabric.c util/src/util_main.c \
+	util/src/util_mem_hooks.c util/src/util_mem_monitor.c \
+	util/src/util_mr_cache.c util/src/util_mr_map.c \
+	util/src/util_ns.c util/src/util_pep.c util/src/util_poll.c \
+	util/src/util_profile.c util/src/util_srx.c \
+	util/src/util_wait.c util/src/rxm_av.c \
+	util/src/cuda_mem_monitor.c util/src/cuda_ipc_monitor.c \
+	util/src/rocr_mem_monitor.c util/src/rocr_ipc_monitor.c \
+	util/src/ze_mem_monitor.c util/src/xpmem_monitor.c \
+	shared/fabric.c shared/fi_tostr.c shared/perf.c shared/log.c \
+	shared/var.c shared/abi_1_0.c shared/osx/osd.c \
+	shared/unix/osd.c inc/osx/osd.h inc/unix/osd.h \
+	inc/freebsd/osd.h shared/linux/osd.c shared/linux/rdpmc.c \
+	inc/linux/rdpmc.h inc/linux/osd.h
 @MACOS_TRUE@am__objects_1 = shared/osx/src_libpsm3_fi_la-osd.lo \
 @MACOS_TRUE@	shared/unix/src_libpsm3_fi_la-osd.lo
 @FREEBSD_TRUE@am__objects_2 = shared/unix/src_libpsm3_fi_la-osd.lo
 @LINUX_TRUE@am__objects_3 = shared/unix/src_libpsm3_fi_la-osd.lo \
 @LINUX_TRUE@	shared/linux/src_libpsm3_fi_la-osd.lo
-@HAVE_LINUX_PERF_RDPMC_TRUE@@HAVE_PSM3_SRC_FALSE@@LINUX_TRUE@am__objects_4 = shared/linux/src_libpsm3_fi_la-rdpmc.lo
+@HAVE_LINUX_PERF_RDPMC_TRUE@@LINUX_TRUE@am__objects_4 = shared/linux/src_libpsm3_fi_la-rdpmc.lo
 am__objects_5 =
 am__objects_6 = shared/src_libpsm3_fi_la-hmem.lo \
 	shared/src_libpsm3_fi_la-hmem_rocr.lo \
@@ -457,6 +465,8 @@ am__objects_6 = shared/src_libpsm3_fi_la-hmem.lo \
 	shared/src_libpsm3_fi_la-hmem_neuron.lo \
 	shared/src_libpsm3_fi_la-hmem_synapseai.lo \
 	shared/src_libpsm3_fi_la-hmem_ipc_cache.lo \
+	shared/src_libpsm3_fi_la-xpmem.lo \
+	shared/src_libpsm3_fi_la-xpmem_cache.lo \
 	shared/src_libpsm3_fi_la-common.lo \
 	shared/src_libpsm3_fi_la-enosys.lo \
 	shared/src_libpsm3_fi_la-rbtree.lo \
@@ -465,7 +475,7 @@ am__objects_6 = shared/src_libpsm3_fi_la-hmem.lo \
 	shared/src_libpsm3_fi_la-indexer.lo \
 	shared/src_libpsm3_fi_la-mem.lo \
 	shared/src_libpsm3_fi_la-iov.lo \
-	shared/shared/src_libpsm3_fi_la-ofi_str.lo \
+	shared/src_libpsm3_fi_la-ofi_str.lo \
 	util/src/src_libpsm3_fi_la-util_atomic.lo \
 	util/src/src_libpsm3_fi_la-util_attr.lo \
 	util/src/src_libpsm3_fi_la-util_av.lo \
@@ -484,14 +494,22 @@ am__objects_6 = shared/src_libpsm3_fi_la-hmem.lo \
 	util/src/src_libpsm3_fi_la-util_ns.lo \
 	util/src/src_libpsm3_fi_la-util_pep.lo \
 	util/src/src_libpsm3_fi_la-util_poll.lo \
-	util/src/src_libpsm3_fi_la-util_shm.lo \
+	util/src/src_libpsm3_fi_la-util_profile.lo \
+	util/src/src_libpsm3_fi_la-util_srx.lo \
 	util/src/src_libpsm3_fi_la-util_wait.lo \
 	util/src/src_libpsm3_fi_la-rxm_av.lo \
 	util/src/src_libpsm3_fi_la-cuda_mem_monitor.lo \
 	util/src/src_libpsm3_fi_la-cuda_ipc_monitor.lo \
 	util/src/src_libpsm3_fi_la-rocr_mem_monitor.lo \
 	util/src/src_libpsm3_fi_la-rocr_ipc_monitor.lo \
-	util/src/src_libpsm3_fi_la-ze_mem_monitor.lo $(am__objects_1) \
+	util/src/src_libpsm3_fi_la-ze_mem_monitor.lo \
+	util/src/src_libpsm3_fi_la-xpmem_monitor.lo \
+	shared/src_libpsm3_fi_la-fabric.lo \
+	shared/src_libpsm3_fi_la-fi_tostr.lo \
+	shared/src_libpsm3_fi_la-perf.lo \
+	shared/src_libpsm3_fi_la-log.lo \
+	shared/src_libpsm3_fi_la-var.lo \
+	shared/src_libpsm3_fi_la-abi_1_0.lo $(am__objects_1) \
 	$(am__objects_2) $(am__objects_3) $(am__objects_4) \
 	$(am__objects_5)
 am_src_libpsm3_fi_la_OBJECTS = src/libpsm3_fi_la-psmx3_am.lo \
@@ -551,6 +569,7 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo \
+	psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo \
@@ -609,9 +628,12 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/utils/$(DEPDIR)/libutils_la-utils_sysfs.Plo \
 	psm3/utils/$(DEPDIR)/libutils_la-utils_syslog.Plo \
 	psm3/utils/$(DEPDIR)/libutils_la-utils_time.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-common.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-enosys.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-fasthash.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo \
@@ -622,13 +644,18 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-iov.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-log.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-mem.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-rbtree.Plo \
 	shared/$(DEPDIR)/src_libpsm3_fi_la-tree.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-var.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Plo \
+	shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Plo \
 	shared/linux/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo \
 	shared/linux/$(DEPDIR)/src_libpsm3_fi_la-rdpmc.Plo \
 	shared/osx/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo \
-	shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo \
 	shared/unix/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo \
 	src/$(DEPDIR)/libpsm3_fi_la-psm3_revision.Plo \
 	src/$(DEPDIR)/libpsm3_fi_la-psmx3_am.Plo \
@@ -672,8 +699,10 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_ns.Plo \
 	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_pep.Plo \
 	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_poll.Plo \
-	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Plo \
+	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Plo \
+	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Plo \
 	util/src/$(DEPDIR)/src_libpsm3_fi_la-util_wait.Plo \
+	util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Plo \
 	util/src/$(DEPDIR)/src_libpsm3_fi_la-ze_mem_monitor.Plo
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
@@ -892,6 +921,9 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+psm3_hwloc_CPPFLAGS = @psm3_hwloc_CPPFLAGS@
+psm3_hwloc_LDFLAGS = @psm3_hwloc_LDFLAGS@
+psm3_hwloc_LIBS = @psm3_hwloc_LIBS@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -923,8 +955,6 @@ libfabric_pkglibdir = $(libdir)/libfabric
 libfabric_pkglib_LTLIBRARIES = $(am__append_2)
 ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -Wall
-@HAVE_LD_VERSION_SCRIPT_FALSE@libpsm3_fi_version_script = 
-@HAVE_LD_VERSION_SCRIPT_TRUE@libpsm3_fi_version_script = -Wl,--version-script=$(builddir)/libpsm3-fi.map
 
 # rdmaincludedir = $(includedir)/rdma
 # providersincludedir = $(rdmaincludedir)/providers
@@ -936,22 +966,24 @@ AM_CFLAGS = -Wall
 common_srcs = shared/hmem.c shared/hmem_rocr.c shared/hmem_cuda.c \
 	shared/hmem_cuda_gdrcopy.c shared/hmem_ze.c \
 	shared/hmem_neuron.c shared/hmem_synapseai.c \
-	shared/hmem_ipc_cache.c shared/common.c shared/enosys.c \
-	shared/rbtree.c shared/tree.c shared/fasthash.c \
-	shared/indexer.c shared/mem.c shared/iov.c \
-	shared/shared/ofi_str.c util/src/util_atomic.c \
-	util/src/util_attr.c util/src/util_av.c util/src/util_buf.c \
-	util/src/util_cq.c util/src/util_cntr.c util/src/util_domain.c \
-	util/src/util_ep.c util/src/util_eq.c util/src/util_fabric.c \
-	util/src/util_main.c util/src/util_mem_hooks.c \
-	util/src/util_mem_monitor.c util/src/util_mr_cache.c \
-	util/src/util_mr_map.c util/src/util_ns.c util/src/util_pep.c \
-	util/src/util_poll.c util/src/util_shm.c util/src/util_wait.c \
-	util/src/rxm_av.c util/src/cuda_mem_monitor.c \
-	util/src/cuda_ipc_monitor.c util/src/rocr_mem_monitor.c \
-	util/src/rocr_ipc_monitor.c util/src/ze_mem_monitor.c \
-	$(am__append_3) $(am__append_4) $(am__append_5) \
-	$(am__append_6) $(am__append_7)
+	shared/hmem_ipc_cache.c shared/xpmem.c shared/xpmem_cache.c \
+	shared/common.c shared/enosys.c shared/rbtree.c shared/tree.c \
+	shared/fasthash.c shared/indexer.c shared/mem.c shared/iov.c \
+	shared/ofi_str.c util/src/util_atomic.c util/src/util_attr.c \
+	util/src/util_av.c util/src/util_buf.c util/src/util_cq.c \
+	util/src/util_cntr.c util/src/util_domain.c util/src/util_ep.c \
+	util/src/util_eq.c util/src/util_fabric.c util/src/util_main.c \
+	util/src/util_mem_hooks.c util/src/util_mem_monitor.c \
+	util/src/util_mr_cache.c util/src/util_mr_map.c \
+	util/src/util_ns.c util/src/util_pep.c util/src/util_poll.c \
+	util/src/util_profile.c util/src/util_srx.c \
+	util/src/util_wait.c util/src/rxm_av.c \
+	util/src/cuda_mem_monitor.c util/src/cuda_ipc_monitor.c \
+	util/src/rocr_mem_monitor.c util/src/rocr_ipc_monitor.c \
+	util/src/ze_mem_monitor.c util/src/xpmem_monitor.c \
+	shared/fabric.c shared/fi_tostr.c shared/perf.c shared/log.c \
+	shared/var.c shared/abi_1_0.c $(am__append_3) $(am__append_4) \
+	$(am__append_5) $(am__append_6) $(am__append_7)
 
 # ensure dl-built providers link back to libfabric
 # linkback = src/libfabric.la
@@ -959,6 +991,8 @@ bin_SCRIPTS =
 nodist_src_libpsm3_fi_la_SOURCES = $(am__append_8)
 src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_hmem.h \
+	inc/ofi_cma.h \
+	inc/ofi_xpmem.h \
 	inc/ofi.h \
 	inc/ofi_abi.h \
 	inc/ofi_atom.h \
@@ -969,14 +1003,14 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_iov.h \
 	inc/ofi_list.h \
 	inc/ofi_bitmask.h \
-	inc/shared/ofi_str.h \
+	inc/ofi_str.h \
 	inc/ofi_lock.h \
 	inc/ofi_mem.h \
 	inc/ofi_osd.h \
 	inc/ofi_proto.h \
 	inc/ofi_recvwin.h \
 	inc/ofi_rbuf.h \
-	inc/ofi_shm.h \
+	inc/ofi_shm_p2p.h \
 	inc/ofi_signal.h \
 	inc/ofi_epoll.h \
 	inc/ofi_tree.h \
@@ -987,10 +1021,12 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_net.h \
 	inc/ofi_perf.h \
 	inc/ofi_coll.h \
+	inc/ofi_mb.h \
 	inc/fasthash.h \
 	inc/rbtree.h \
 	inc/uthash.h \
 	inc/ofi_prov.h \
+	inc/ofi_profile.h \
 	inc/rdma/providers/fi_log.h \
 	inc/rdma/providers/fi_prov.h \
 	inc/rdma/providers/fi_peer.h \
@@ -1006,6 +1042,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/rdma/fi_errno.h \
 	inc/rdma/fi_tagged.h \
 	inc/rdma/fi_trigger.h \
+	inc/rdma/fi_profile.h \
 	src/psmx3.h \
 	src/psmx3_am.c \
 	src/psmx3_atomic.c \
@@ -1226,6 +1263,8 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_mq_recv.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_mq_utils.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_netutils.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/psm_nic_select.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/psm_nic_select.h \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_oneapi_ze.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_perf.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_perf.h \
@@ -1513,6 +1552,8 @@ psm3/libpsm3i_la-psm_mq_recv.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_mq_utils.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
+psm3/libpsm3i_la-psm_nic_select.lo: psm3/$(am__dirstamp) \
+	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_oneapi_ze.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_perf.lo: psm3/$(am__dirstamp) \
@@ -1722,6 +1763,10 @@ shared/src_libpsm3_fi_la-hmem_synapseai.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-hmem_ipc_cache.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-xpmem.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-xpmem_cache.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-common.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-enosys.lo: shared/$(am__dirstamp) \
@@ -1738,15 +1783,8 @@ shared/src_libpsm3_fi_la-mem.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
 shared/src_libpsm3_fi_la-iov.lo: shared/$(am__dirstamp) \
 	shared/$(DEPDIR)/$(am__dirstamp)
-shared/shared/$(am__dirstamp):
-	@$(MKDIR_P) shared/shared
-	@: > shared/shared/$(am__dirstamp)
-shared/shared/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) shared/shared/$(DEPDIR)
-	@: > shared/shared/$(DEPDIR)/$(am__dirstamp)
-shared/shared/src_libpsm3_fi_la-ofi_str.lo:  \
-	shared/shared/$(am__dirstamp) \
-	shared/shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-ofi_str.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
 util/src/$(am__dirstamp):
 	@$(MKDIR_P) util/src
 	@: > util/src/$(am__dirstamp)
@@ -1789,7 +1827,9 @@ util/src/src_libpsm3_fi_la-util_pep.lo: util/src/$(am__dirstamp) \
 	util/src/$(DEPDIR)/$(am__dirstamp)
 util/src/src_libpsm3_fi_la-util_poll.lo: util/src/$(am__dirstamp) \
 	util/src/$(DEPDIR)/$(am__dirstamp)
-util/src/src_libpsm3_fi_la-util_shm.lo: util/src/$(am__dirstamp) \
+util/src/src_libpsm3_fi_la-util_profile.lo: util/src/$(am__dirstamp) \
+	util/src/$(DEPDIR)/$(am__dirstamp)
+util/src/src_libpsm3_fi_la-util_srx.lo: util/src/$(am__dirstamp) \
 	util/src/$(DEPDIR)/$(am__dirstamp)
 util/src/src_libpsm3_fi_la-util_wait.lo: util/src/$(am__dirstamp) \
 	util/src/$(DEPDIR)/$(am__dirstamp)
@@ -1805,6 +1845,20 @@ util/src/src_libpsm3_fi_la-rocr_ipc_monitor.lo:  \
 	util/src/$(am__dirstamp) util/src/$(DEPDIR)/$(am__dirstamp)
 util/src/src_libpsm3_fi_la-ze_mem_monitor.lo:  \
 	util/src/$(am__dirstamp) util/src/$(DEPDIR)/$(am__dirstamp)
+util/src/src_libpsm3_fi_la-xpmem_monitor.lo: util/src/$(am__dirstamp) \
+	util/src/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-fabric.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-fi_tostr.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-perf.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-log.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-var.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
+shared/src_libpsm3_fi_la-abi_1_0.lo: shared/$(am__dirstamp) \
+	shared/$(DEPDIR)/$(am__dirstamp)
 shared/osx/$(am__dirstamp):
 	@$(MKDIR_P) shared/osx
 	@: > shared/osx/$(am__dirstamp)
@@ -1894,8 +1948,6 @@ mostlyclean-compile:
 	-rm -f shared/linux/*.lo
 	-rm -f shared/osx/*.$(OBJEXT)
 	-rm -f shared/osx/*.lo
-	-rm -f shared/shared/*.$(OBJEXT)
-	-rm -f shared/shared/*.lo
 	-rm -f shared/unix/*.$(OBJEXT)
 	-rm -f shared/unix/*.lo
 	-rm -f src/*.$(OBJEXT)
@@ -1921,6 +1973,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo@am__quote@ # am--include-marker
@@ -1979,9 +2032,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/utils/$(DEPDIR)/libutils_la-utils_sysfs.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/utils/$(DEPDIR)/libutils_la-utils_syslog.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/utils/$(DEPDIR)/libutils_la-utils_time.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-common.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-enosys.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-fasthash.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo@am__quote@ # am--include-marker
@@ -1992,13 +2048,18 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-iov.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-log.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-mem.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-rbtree.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-tree.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-var.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/linux/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/linux/$(DEPDIR)/src_libpsm3_fi_la-rdpmc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/osx/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@shared/unix/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libpsm3_fi_la-psm3_revision.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libpsm3_fi_la-psmx3_am.Plo@am__quote@ # am--include-marker
@@ -2042,8 +2103,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_ns.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_pep.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_poll.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-util_wait.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/src/$(DEPDIR)/src_libpsm3_fi_la-ze_mem_monitor.Plo@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -2271,6 +2334,13 @@ psm3/libpsm3i_la-psm_mq_utils.lo: psm3/psm_mq_utils.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/psm_mq_utils.c' object='psm3/libpsm3i_la-psm_mq_utils.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm_mq_utils.lo `test -f 'psm3/psm_mq_utils.c' || echo '$(srcdir)/'`psm3/psm_mq_utils.c
+
+psm3/libpsm3i_la-psm_nic_select.lo: psm3/psm_nic_select.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -MT psm3/libpsm3i_la-psm_nic_select.lo -MD -MP -MF psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Tpo -c -o psm3/libpsm3i_la-psm_nic_select.lo `test -f 'psm3/psm_nic_select.c' || echo '$(srcdir)/'`psm3/psm_nic_select.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Tpo psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/psm_nic_select.c' object='psm3/libpsm3i_la-psm_nic_select.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm_nic_select.lo `test -f 'psm3/psm_nic_select.c' || echo '$(srcdir)/'`psm3/psm_nic_select.c
 
 psm3/libpsm3i_la-psm_oneapi_ze.lo: psm3/psm_oneapi_ze.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -MT psm3/libpsm3i_la-psm_oneapi_ze.lo -MD -MP -MF psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Tpo -c -o psm3/libpsm3i_la-psm_oneapi_ze.lo `test -f 'psm3/psm_oneapi_ze.c' || echo '$(srcdir)/'`psm3/psm_oneapi_ze.c
@@ -2769,6 +2839,20 @@ shared/src_libpsm3_fi_la-hmem_ipc_cache.lo: shared/hmem_ipc_cache.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-hmem_ipc_cache.lo `test -f 'shared/hmem_ipc_cache.c' || echo '$(srcdir)/'`shared/hmem_ipc_cache.c
 
+shared/src_libpsm3_fi_la-xpmem.lo: shared/xpmem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-xpmem.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Tpo -c -o shared/src_libpsm3_fi_la-xpmem.lo `test -f 'shared/xpmem.c' || echo '$(srcdir)/'`shared/xpmem.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/xpmem.c' object='shared/src_libpsm3_fi_la-xpmem.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-xpmem.lo `test -f 'shared/xpmem.c' || echo '$(srcdir)/'`shared/xpmem.c
+
+shared/src_libpsm3_fi_la-xpmem_cache.lo: shared/xpmem_cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-xpmem_cache.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Tpo -c -o shared/src_libpsm3_fi_la-xpmem_cache.lo `test -f 'shared/xpmem_cache.c' || echo '$(srcdir)/'`shared/xpmem_cache.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/xpmem_cache.c' object='shared/src_libpsm3_fi_la-xpmem_cache.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-xpmem_cache.lo `test -f 'shared/xpmem_cache.c' || echo '$(srcdir)/'`shared/xpmem_cache.c
+
 shared/src_libpsm3_fi_la-common.lo: shared/common.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-common.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-common.Tpo -c -o shared/src_libpsm3_fi_la-common.lo `test -f 'shared/common.c' || echo '$(srcdir)/'`shared/common.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-common.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-common.Plo
@@ -2825,12 +2909,12 @@ shared/src_libpsm3_fi_la-iov.lo: shared/iov.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-iov.lo `test -f 'shared/iov.c' || echo '$(srcdir)/'`shared/iov.c
 
-shared/shared/src_libpsm3_fi_la-ofi_str.lo: shared/shared/ofi_str.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/shared/src_libpsm3_fi_la-ofi_str.lo -MD -MP -MF shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Tpo -c -o shared/shared/src_libpsm3_fi_la-ofi_str.lo `test -f 'shared/shared/ofi_str.c' || echo '$(srcdir)/'`shared/shared/ofi_str.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Tpo shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/shared/ofi_str.c' object='shared/shared/src_libpsm3_fi_la-ofi_str.lo' libtool=yes @AMDEPBACKSLASH@
+shared/src_libpsm3_fi_la-ofi_str.lo: shared/ofi_str.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-ofi_str.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Tpo -c -o shared/src_libpsm3_fi_la-ofi_str.lo `test -f 'shared/ofi_str.c' || echo '$(srcdir)/'`shared/ofi_str.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/ofi_str.c' object='shared/src_libpsm3_fi_la-ofi_str.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/shared/src_libpsm3_fi_la-ofi_str.lo `test -f 'shared/shared/ofi_str.c' || echo '$(srcdir)/'`shared/shared/ofi_str.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-ofi_str.lo `test -f 'shared/ofi_str.c' || echo '$(srcdir)/'`shared/ofi_str.c
 
 util/src/src_libpsm3_fi_la-util_atomic.lo: util/src/util_atomic.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT util/src/src_libpsm3_fi_la-util_atomic.lo -MD -MP -MF util/src/$(DEPDIR)/src_libpsm3_fi_la-util_atomic.Tpo -c -o util/src/src_libpsm3_fi_la-util_atomic.lo `test -f 'util/src/util_atomic.c' || echo '$(srcdir)/'`util/src/util_atomic.c
@@ -2958,12 +3042,19 @@ util/src/src_libpsm3_fi_la-util_poll.lo: util/src/util_poll.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o util/src/src_libpsm3_fi_la-util_poll.lo `test -f 'util/src/util_poll.c' || echo '$(srcdir)/'`util/src/util_poll.c
 
-util/src/src_libpsm3_fi_la-util_shm.lo: util/src/util_shm.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT util/src/src_libpsm3_fi_la-util_shm.lo -MD -MP -MF util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Tpo -c -o util/src/src_libpsm3_fi_la-util_shm.lo `test -f 'util/src/util_shm.c' || echo '$(srcdir)/'`util/src/util_shm.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Tpo util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='util/src/util_shm.c' object='util/src/src_libpsm3_fi_la-util_shm.lo' libtool=yes @AMDEPBACKSLASH@
+util/src/src_libpsm3_fi_la-util_profile.lo: util/src/util_profile.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT util/src/src_libpsm3_fi_la-util_profile.lo -MD -MP -MF util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Tpo -c -o util/src/src_libpsm3_fi_la-util_profile.lo `test -f 'util/src/util_profile.c' || echo '$(srcdir)/'`util/src/util_profile.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Tpo util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='util/src/util_profile.c' object='util/src/src_libpsm3_fi_la-util_profile.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o util/src/src_libpsm3_fi_la-util_shm.lo `test -f 'util/src/util_shm.c' || echo '$(srcdir)/'`util/src/util_shm.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o util/src/src_libpsm3_fi_la-util_profile.lo `test -f 'util/src/util_profile.c' || echo '$(srcdir)/'`util/src/util_profile.c
+
+util/src/src_libpsm3_fi_la-util_srx.lo: util/src/util_srx.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT util/src/src_libpsm3_fi_la-util_srx.lo -MD -MP -MF util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Tpo -c -o util/src/src_libpsm3_fi_la-util_srx.lo `test -f 'util/src/util_srx.c' || echo '$(srcdir)/'`util/src/util_srx.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Tpo util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='util/src/util_srx.c' object='util/src/src_libpsm3_fi_la-util_srx.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o util/src/src_libpsm3_fi_la-util_srx.lo `test -f 'util/src/util_srx.c' || echo '$(srcdir)/'`util/src/util_srx.c
 
 util/src/src_libpsm3_fi_la-util_wait.lo: util/src/util_wait.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT util/src/src_libpsm3_fi_la-util_wait.lo -MD -MP -MF util/src/$(DEPDIR)/src_libpsm3_fi_la-util_wait.Tpo -c -o util/src/src_libpsm3_fi_la-util_wait.lo `test -f 'util/src/util_wait.c' || echo '$(srcdir)/'`util/src/util_wait.c
@@ -3013,6 +3104,55 @@ util/src/src_libpsm3_fi_la-ze_mem_monitor.lo: util/src/ze_mem_monitor.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='util/src/ze_mem_monitor.c' object='util/src/src_libpsm3_fi_la-ze_mem_monitor.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o util/src/src_libpsm3_fi_la-ze_mem_monitor.lo `test -f 'util/src/ze_mem_monitor.c' || echo '$(srcdir)/'`util/src/ze_mem_monitor.c
+
+util/src/src_libpsm3_fi_la-xpmem_monitor.lo: util/src/xpmem_monitor.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT util/src/src_libpsm3_fi_la-xpmem_monitor.lo -MD -MP -MF util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Tpo -c -o util/src/src_libpsm3_fi_la-xpmem_monitor.lo `test -f 'util/src/xpmem_monitor.c' || echo '$(srcdir)/'`util/src/xpmem_monitor.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Tpo util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='util/src/xpmem_monitor.c' object='util/src/src_libpsm3_fi_la-xpmem_monitor.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o util/src/src_libpsm3_fi_la-xpmem_monitor.lo `test -f 'util/src/xpmem_monitor.c' || echo '$(srcdir)/'`util/src/xpmem_monitor.c
+
+shared/src_libpsm3_fi_la-fabric.lo: shared/fabric.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-fabric.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Tpo -c -o shared/src_libpsm3_fi_la-fabric.lo `test -f 'shared/fabric.c' || echo '$(srcdir)/'`shared/fabric.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/fabric.c' object='shared/src_libpsm3_fi_la-fabric.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-fabric.lo `test -f 'shared/fabric.c' || echo '$(srcdir)/'`shared/fabric.c
+
+shared/src_libpsm3_fi_la-fi_tostr.lo: shared/fi_tostr.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-fi_tostr.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Tpo -c -o shared/src_libpsm3_fi_la-fi_tostr.lo `test -f 'shared/fi_tostr.c' || echo '$(srcdir)/'`shared/fi_tostr.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/fi_tostr.c' object='shared/src_libpsm3_fi_la-fi_tostr.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-fi_tostr.lo `test -f 'shared/fi_tostr.c' || echo '$(srcdir)/'`shared/fi_tostr.c
+
+shared/src_libpsm3_fi_la-perf.lo: shared/perf.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-perf.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Tpo -c -o shared/src_libpsm3_fi_la-perf.lo `test -f 'shared/perf.c' || echo '$(srcdir)/'`shared/perf.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/perf.c' object='shared/src_libpsm3_fi_la-perf.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-perf.lo `test -f 'shared/perf.c' || echo '$(srcdir)/'`shared/perf.c
+
+shared/src_libpsm3_fi_la-log.lo: shared/log.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-log.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-log.Tpo -c -o shared/src_libpsm3_fi_la-log.lo `test -f 'shared/log.c' || echo '$(srcdir)/'`shared/log.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-log.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-log.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/log.c' object='shared/src_libpsm3_fi_la-log.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-log.lo `test -f 'shared/log.c' || echo '$(srcdir)/'`shared/log.c
+
+shared/src_libpsm3_fi_la-var.lo: shared/var.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-var.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-var.Tpo -c -o shared/src_libpsm3_fi_la-var.lo `test -f 'shared/var.c' || echo '$(srcdir)/'`shared/var.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-var.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-var.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/var.c' object='shared/src_libpsm3_fi_la-var.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-var.lo `test -f 'shared/var.c' || echo '$(srcdir)/'`shared/var.c
+
+shared/src_libpsm3_fi_la-abi_1_0.lo: shared/abi_1_0.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/src_libpsm3_fi_la-abi_1_0.lo -MD -MP -MF shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Tpo -c -o shared/src_libpsm3_fi_la-abi_1_0.lo `test -f 'shared/abi_1_0.c' || echo '$(srcdir)/'`shared/abi_1_0.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Tpo shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='shared/abi_1_0.c' object='shared/src_libpsm3_fi_la-abi_1_0.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o shared/src_libpsm3_fi_la-abi_1_0.lo `test -f 'shared/abi_1_0.c' || echo '$(srcdir)/'`shared/abi_1_0.c
 
 shared/osx/src_libpsm3_fi_la-osd.lo: shared/osx/osd.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(src_libpsm3_fi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT shared/osx/src_libpsm3_fi_la-osd.lo -MD -MP -MF shared/osx/$(DEPDIR)/src_libpsm3_fi_la-osd.Tpo -c -o shared/osx/src_libpsm3_fi_la-osd.lo `test -f 'shared/osx/osd.c' || echo '$(srcdir)/'`shared/osx/osd.c
@@ -3064,7 +3204,6 @@ clean-libtool:
 	-rm -rf shared/.libs shared/_libs
 	-rm -rf shared/linux/.libs shared/linux/_libs
 	-rm -rf shared/osx/.libs shared/osx/_libs
-	-rm -rf shared/shared/.libs shared/shared/_libs
 	-rm -rf shared/unix/.libs shared/unix/_libs
 	-rm -rf src/.libs src/_libs
 	-rm -rf util/src/.libs util/src/_libs
@@ -3420,8 +3559,6 @@ distclean-generic:
 	-rm -f shared/linux/$(am__dirstamp)
 	-rm -f shared/osx/$(DEPDIR)/$(am__dirstamp)
 	-rm -f shared/osx/$(am__dirstamp)
-	-rm -f shared/shared/$(DEPDIR)/$(am__dirstamp)
-	-rm -f shared/shared/$(am__dirstamp)
 	-rm -f shared/unix/$(DEPDIR)/$(am__dirstamp)
 	-rm -f shared/unix/$(am__dirstamp)
 	-rm -f src/$(DEPDIR)/$(am__dirstamp)
@@ -3456,6 +3593,7 @@ distclean: distclean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo
+	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo
@@ -3514,9 +3652,12 @@ distclean: distclean-am
 	-rm -f psm3/utils/$(DEPDIR)/libutils_la-utils_sysfs.Plo
 	-rm -f psm3/utils/$(DEPDIR)/libutils_la-utils_syslog.Plo
 	-rm -f psm3/utils/$(DEPDIR)/libutils_la-utils_time.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-common.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-enosys.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-fasthash.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo
@@ -3527,13 +3668,18 @@ distclean: distclean-am
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-iov.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-log.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-mem.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-rbtree.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-tree.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-var.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Plo
 	-rm -f shared/linux/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo
 	-rm -f shared/linux/$(DEPDIR)/src_libpsm3_fi_la-rdpmc.Plo
 	-rm -f shared/osx/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo
-	-rm -f shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo
 	-rm -f shared/unix/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo
 	-rm -f src/$(DEPDIR)/libpsm3_fi_la-psm3_revision.Plo
 	-rm -f src/$(DEPDIR)/libpsm3_fi_la-psmx3_am.Plo
@@ -3577,8 +3723,10 @@ distclean: distclean-am
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_ns.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_pep.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_poll.Plo
-	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Plo
+	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Plo
+	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_wait.Plo
+	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-ze_mem_monitor.Plo
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -3643,6 +3791,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo
+	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo
@@ -3701,9 +3850,12 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/utils/$(DEPDIR)/libutils_la-utils_sysfs.Plo
 	-rm -f psm3/utils/$(DEPDIR)/libutils_la-utils_syslog.Plo
 	-rm -f psm3/utils/$(DEPDIR)/libutils_la-utils_time.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-abi_1_0.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-common.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-enosys.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-fabric.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-fasthash.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-fi_tostr.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_cuda_gdrcopy.Plo
@@ -3714,13 +3866,18 @@ maintainer-clean: maintainer-clean-am
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-hmem_ze.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-indexer.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-iov.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-log.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-mem.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-perf.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-rbtree.Plo
 	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-tree.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-var.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem.Plo
+	-rm -f shared/$(DEPDIR)/src_libpsm3_fi_la-xpmem_cache.Plo
 	-rm -f shared/linux/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo
 	-rm -f shared/linux/$(DEPDIR)/src_libpsm3_fi_la-rdpmc.Plo
 	-rm -f shared/osx/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo
-	-rm -f shared/shared/$(DEPDIR)/src_libpsm3_fi_la-ofi_str.Plo
 	-rm -f shared/unix/$(DEPDIR)/src_libpsm3_fi_la-osd.Plo
 	-rm -f src/$(DEPDIR)/libpsm3_fi_la-psm3_revision.Plo
 	-rm -f src/$(DEPDIR)/libpsm3_fi_la-psmx3_am.Plo
@@ -3764,8 +3921,10 @@ maintainer-clean: maintainer-clean-am
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_ns.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_pep.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_poll.Plo
-	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_shm.Plo
+	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_profile.Plo
+	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_srx.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-util_wait.Plo
+	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-xpmem_monitor.Plo
 	-rm -f util/src/$(DEPDIR)/src_libpsm3_fi_la-ze_mem_monitor.Plo
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
@@ -3816,6 +3975,9 @@ uninstall-man: uninstall-man7
 
 .PRECIOUS: Makefile
 
+
+@HAVE_LD_VERSION_SCRIPT_TRUE@	libpsm3_fi_version_script = -Wl,--version-script=$(builddir)/libpsm3-fi.map
+@HAVE_LD_VERSION_SCRIPT_FALSE@	libpsm3_fi_version_script =
 src/psm3_src_chksum.h: Makefile $(chksum_srcs)
 	$(AM_V_GEN) chksum=`for file in $(chksum_srcs); do cat $(top_srcdir)/$$file; done | sha1sum | cut -d' ' -f 1`; \
 	if ! grep -q $$chksum src/psm3_src_chksum.h 2>/dev/null; then \
@@ -3825,8 +3987,8 @@ src/psm3_src_chksum.h: Makefile $(chksum_srcs)
 
 nroff:
 	@for file in $(prov_install_man_pages); do \
-	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
-	    perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
+		source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
+		perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
 	done
 
 dist-hook: libpsm3-fi.spec

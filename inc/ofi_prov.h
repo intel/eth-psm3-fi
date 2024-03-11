@@ -90,17 +90,6 @@ EFA_INI ;
 #  define EFA_INIT NULL
 #endif
 
-#if (HAVE_PSM) && (HAVE_PSM_DL)
-#  define PSM_INI FI_EXT_INI
-#  define PSM_INIT NULL
-#elif (HAVE_PSM)
-#  define PSM_INI INI_SIG(fi_psm_ini)
-#  define PSM_INIT fi_psm_ini()
-PSM_INI ;
-#else
-#  define PSM_INIT NULL
-#endif
-
 #if (HAVE_PSM2) && (HAVE_PSM2_DL)
 #  define PSM2_INI FI_EXT_INI
 #  define PSM2_INIT NULL
@@ -281,6 +270,18 @@ HOOK_TRACE_INI ;
 #  define HOOK_TRACE_INIT NULL
 #endif
 
+#if (HAVE_PROFILE) && (HAVE_PROFILE_DL)
+#  define HOOK_PROFILE_INI FI_EXT_INI
+#  define HOOK_PROFILE_INIT NULL
+#elif (HAVE_PROFILE)
+#  define HOOK_PROFILE_INI INI_SIG(fi_hook_profile_ini)
+#  define HOOK_PROFILE_INIT fi_hook_profile_ini()
+HOOK_PROFILE_INI ;
+#else
+#  define HOOK_PROFILE_INIT NULL
+#endif
+
+
 #if (HAVE_HOOK_DEBUG) && (HAVE_HOOK_DEBUG_DL)
 #  define HOOK_DEBUG_INI FI_EXT_INI
 #  define HOOK_DEBUG_INIT NULL
@@ -314,9 +315,11 @@ HOOK_DMABUF_PEER_MEM_INI ;
 #  define HOOK_DMABUF_PEER_MEM_INIT NULL
 #endif
 
+#ifndef HOOK_NOOP_INIT
 #  define HOOK_NOOP_INI INI_SIG(fi_hook_noop_ini)
 #  define HOOK_NOOP_INIT fi_hook_noop_ini()
 HOOK_NOOP_INI ;
+#endif
 
 #if (HAVE_OPX) && (HAVE_OPX_DL)
 #  define OPX_INI FI_EXT_INI
@@ -340,9 +343,11 @@ UCX_INI ;
 #  define UCX_INIT NULL
 #endif
 
+#ifndef COLL_INIT
 /* the utility collective provider is always enabled and built-in */
 #define COLL_INI INI_SIG(fi_coll_ini)
 #define COLL_INIT fi_coll_ini()
 COLL_INI ;
+#endif
 
 #endif /* _OFI_PROV_H_ */

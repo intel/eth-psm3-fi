@@ -1,10 +1,12 @@
 %{!?configopts: %global configopts LDFLAGS=-Wl,--build-id}
 %{!?provider: %define provider psm3}
 %{!?provider_formal: %define provider_formal PSM3}
+# Disable setting SOURCE_DATE_EPOCH from changelog
+%define source_date_epoch_from_changelog 0
 
 Name: lib%{provider}-fi
-Version: 11.5.1.1
-Release: 1
+Version: 11.6.0.0
+Release: 231
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries
@@ -18,6 +20,7 @@ Provides: lib${provider}-fi1 = %{version}-%{release}
 
 BuildRequires: libuuid-devel
 BuildRequires: rdma-core-devel
+BuildRequires: hwloc-devel
 %if 0%{?suse_version} >= 1
 BuildRequires: glibc-devel
 BuildRequires: libnuma-devel

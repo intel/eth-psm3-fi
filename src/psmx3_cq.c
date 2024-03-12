@@ -622,8 +622,10 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 			data = PSMX3_GET_CQDATA(PSMX3_STATUS_TAG(req));
 			if (PSMX3_HAS_IMM(PSMX3_GET_FLAGS(PSMX3_STATUS_TAG(req))))
 				flags |= FI_REMOTE_CQ_DATA;
-			if (multi_recv_req->offset + PSMX3_STATUS_RCVLEN(req) +
-				multi_recv_req->min_buf_size > multi_recv_req->len)
+			len_remaining = multi_recv_req->len - multi_recv_req->offset -
+					PSMX3_STATUS_RCVLEN(req);
+			if (len_remaining < multi_recv_req->min_buf_size ||
+			    len_remaining == 0)
 				flags |= FI_MULTI_RECV;	/* buffer used up */
 			err = psmx3_cq_rx_complete(
 					status_data->poll_cq, ep->recv_cq, ep->av,
@@ -638,7 +640,8 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 		/* repost multi-recv buffer */
 		multi_recv_req->offset += PSMX3_STATUS_RCVLEN(req);
 		len_remaining = multi_recv_req->len - multi_recv_req->offset;
-		if (len_remaining >= multi_recv_req->min_buf_size) {
+		if (len_remaining >= multi_recv_req->min_buf_size &&
+		    len_remaining > 0) {
 			if (len_remaining > PSMX3_MAX_MSG_SIZE)
 				len_remaining = PSMX3_MAX_MSG_SIZE;
 			err = psm3_mq_irecv2(ep->rx->psm2_mq,
@@ -786,7 +789,8 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 			multi_recv_req = PSMX3_CTXT_USER(fi_context);
 			multi_recv_req->offset += PSMX3_STATUS_RCVLEN(req);
 			len_remaining = multi_recv_req->len - multi_recv_req->offset;
-			if (len_remaining >= multi_recv_req->min_buf_size) {
+			if (len_remaining >= multi_recv_req->min_buf_size &&
+			    len_remaining > 0) {
 				if (len_remaining > PSMX3_MAX_MSG_SIZE)
 					len_remaining = PSMX3_MAX_MSG_SIZE;
 				err = psm3_mq_irecv2(ep->rx->psm2_mq,
@@ -954,19 +958,13 @@ STATIC ssize_t psmx3_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 				uint64_t flags)
 {
 	struct psmx3_fid_cq *cq_priv;
-	uint32_t api_version;
-	size_t size;
 
 	cq_priv = container_of(cq, struct psmx3_fid_cq, cq);
 
 	cq_priv->domain->cq_lock_fn(&cq_priv->lock, 2);
 	if (cq_priv->pending_error) {
-		api_version = cq_priv->domain->fabric->util_fabric.
-			      fabric_fid.api_version;
-		size = FI_VERSION_GE(api_version, FI_VERSION(1, 5)) ?
-			sizeof(*buf) : sizeof(struct fi_cq_err_entry_1_0);
-
-		memcpy(buf, &cq_priv->pending_error->cqe, size);
+		ofi_cq_err_memcpy(cq_priv->domain->fabric->util_fabric.fabric_fid.api_version,
+				  buf, &cq_priv->pending_error->cqe.err);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
 		psmx3_unlock(&cq_priv->lock, 2);

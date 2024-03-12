@@ -3,6 +3,9 @@
 /* adds build_id to version if it was defined */
 #undef BUILD_ID
 
+/* Ignore COLL_INIT */
+#undef COLL_INIT
+
 /* CUDA Support */
 #undef ENABLE_CUDA_DLOPEN
 
@@ -81,6 +84,10 @@
 /* Set to 1 to use ethtool */
 #undef HAVE_ETHTOOL
 
+/* defined to 1 if libfabric was configured with --enable-profile, 0 otherwise
+   */
+#undef HAVE_FABRIC_PROFILE
+
 /* Ignore HAVE_GDRCOPY */
 #undef HAVE_GDRCOPY
 
@@ -98,6 +105,9 @@
 
 /* Ignore HAVE_HOOK_HMEM */
 #undef HAVE_HOOK_HMEM
+
+/* Define to 1 if you have the <hwloc.h> header file. */
+#undef HAVE_HWLOC_H
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
@@ -292,8 +302,14 @@
 /* Ignore HAVE_VERBS_DL */
 #undef HAVE_VERBS_DL
 
+/* Ignore HAVE_XPMEM */
+#undef HAVE_XPMEM
+
 /* ZE support */
 #undef HAVE_ZE
+
+/* Ignore HOOK_NOOP_INIT */
+#undef HOOK_NOOP_INIT
 
 /* Define to 1 to enable valgrind annotations */
 #undef INCLUDE_VALGRIND

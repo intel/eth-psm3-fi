@@ -185,6 +185,8 @@ psm3_libpsm3i_la_SOURCES = \
 	psm3/psm_mq_recv.c \
 	psm3/psm_mq_utils.c \
 	psm3/psm_netutils.h \
+	psm3/psm_nic_select.c \
+	psm3/psm_nic_select.h \
 	psm3/psm_oneapi_ze.c \
 	psm3/psm_perf.c \
 	psm3/psm_perf.h \

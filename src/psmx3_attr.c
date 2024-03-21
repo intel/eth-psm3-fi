@@ -620,7 +620,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 			int addr_index = psmx3_domain_info.addr_index[unit];
 
 			args[0].unit = unit_id;
-			args[1].port = port;
+			args[1].port = port == PSMX3_DEFAULT_PORT ? 1 : port;
 			args[2].addr_index = addr_index;
 			args[3].length = sizeof(unit_name);
 
@@ -652,7 +652,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 			int addr_index = psmx3_domain_info.addr_index[unit];
 
 			args[0].unit = unit_id;
-			args[1].port = port;
+			args[1].port = port == PSMX3_DEFAULT_PORT ? 1 : port;
 			args[2].addr_index = addr_index;
 			args[3].length = sizeof(fabric_name);
 

@@ -5,8 +5,8 @@
 %define source_date_epoch_from_changelog 0
 
 Name: lib%{provider}-fi
-Version: 11.6.0.1
-Release: 1
+Version: 11.7.0.0
+Release: 110
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries

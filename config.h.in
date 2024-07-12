@@ -308,6 +308,9 @@
 /* ZE support */
 #undef HAVE_ZE
 
+/* Set to 1 to use 128-bit ints */
+#undef HAVE___INT128
+
 /* Ignore HOOK_NOOP_INIT */
 #undef HOOK_NOOP_INIT
 

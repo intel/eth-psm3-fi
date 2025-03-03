@@ -113,6 +113,7 @@ noinst_PROGRAMS =
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_self.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_verbs.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_sockets.la \
+@HAVE_PSM3_SRC_TRUE@	psm3/libgpu.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i.la
 
 @HAVE_PSM3_SRC_TRUE@am__append_10 = $(_psm3_extra_dist)
@@ -123,6 +124,7 @@ noinst_PROGRAMS =
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libutils_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libhal_verbs_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libhal_sockets_la_SOURCES) \
+@HAVE_PSM3_SRC_TRUE@	$(psm3_libgpu_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(psm3_libpsm3i_la_SOURCES) \
 @HAVE_PSM3_SRC_TRUE@	$(_psm3_extra_dist)
 
@@ -132,7 +134,7 @@ noinst_PROGRAMS =
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i.la
 
 @HAVE_PSM3_SRC_FALSE@am__append_14 = -lpsm2
-@EMBEDDED_FALSE@am__append_15 = -version-info 24:0:23
+@EMBEDDED_FALSE@am__append_15 = -version-info 25:0:24
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/fi_check_package.m4 \
@@ -187,6 +189,25 @@ am__installdirs = "$(DESTDIR)$(libfabric_pkglibdir)" \
 	"$(DESTDIR)$(bindir)" "$(DESTDIR)$(man7dir)" \
 	"$(DESTDIR)$(pkgconfigdir)"
 LTLIBRARIES = $(libfabric_pkglib_LTLIBRARIES) $(noinst_LTLIBRARIES)
+psm3_libgpu_la_LIBADD =
+am__psm3_libgpu_la_SOURCES_DIST = psm3/gpu/psm_gpu_hal.c \
+	psm3/gpu/psm_gpu_hal.h psm3/gpu/psm_gpu_cuda.c \
+	psm3/gpu/psm_gpu_oneapi_ze.c
+am__dirstamp = $(am__leading_dot)dirstamp
+@HAVE_PSM3_SRC_TRUE@am_psm3_libgpu_la_OBJECTS =  \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/libgpu_la-psm_gpu_hal.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/libgpu_la-psm_gpu_cuda.lo \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo
+psm3_libgpu_la_OBJECTS = $(am_psm3_libgpu_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+psm3_libgpu_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(psm3_libgpu_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o \
+	$@
+@HAVE_PSM3_SRC_TRUE@am_psm3_libgpu_la_rpath =
 psm3_libhal_sockets_la_LIBADD =
 am__psm3_libhal_sockets_la_SOURCES_DIST =  \
 	psm3/hal_sockets/sockets_ep.c psm3/hal_sockets/sockets_ep.h \
@@ -200,7 +221,6 @@ am__psm3_libhal_sockets_la_SOURCES_DIST =  \
 	psm3/hal_sockets/sockets_ptl_ips.c \
 	psm3/hal_sockets/sockets_rcvthread.c \
 	psm3/hal_sockets/sockets_recvhdrq.c
-am__dirstamp = $(am__leading_dot)dirstamp
 @HAVE_PSM3_SRC_TRUE@am_psm3_libhal_sockets_la_OBJECTS = psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_service.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_gdrcpy.lo \
@@ -210,10 +230,6 @@ am__dirstamp = $(am__leading_dot)dirstamp
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_rcvthread.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/hal_sockets/libhal_sockets_la-sockets_recvhdrq.lo
 psm3_libhal_sockets_la_OBJECTS = $(am_psm3_libhal_sockets_la_OBJECTS)
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 psm3_libhal_sockets_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
@@ -250,17 +266,16 @@ am__psm3_libpsm3i_la_SOURCES_DIST = psm3/psm.c psm3/psm_am.c \
 	psm3/psm_mpool.c psm3/psm_mpool.h psm3/psm_mq.c \
 	psm3/psm_mq_internal.h psm3/psm_mq_recv.c psm3/psm_mq_utils.c \
 	psm3/psm_netutils.h psm3/psm_nic_select.c \
-	psm3/psm_nic_select.h psm3/psm_oneapi_ze.c psm3/psm_perf.c \
-	psm3/psm_perf.h psm3/psm_rndv_mod.c psm3/psm_rndv_mod.h \
-	psm3/psm_stats.c psm3/psm_stats.h psm3/psm_sysbuf.c \
-	psm3/psm_sysbuf.h psm3/psm_timer.c psm3/psm_timer.h \
-	psm3/psm_uffd.c psm3/psm_uffd.h psm3/psm_user.h \
-	psm3/psm_utils.c psm3/psm_utils.h psm3/psm_verbs_mr.c \
-	psm3/psm_verbs_mr.h psm3/psmi_wrappers.c psm3/psmi_wrappers.h \
-	psm3/psm2.h psm3/psm2_am.h psm3/psm2_hal.c \
-	psm3/psm2_hal_loopback.c psm3/psm2_hal.h \
-	psm3/psm2_hal_loopback.h psm3/psm2_hal_inline_t.h \
-	psm3/psm2_mq.h psm3/ptl.h
+	psm3/psm_nic_select.h psm3/psm_perf.c psm3/psm_perf.h \
+	psm3/psm_rndv_mod.c psm3/psm_rndv_mod.h psm3/psm_stats.c \
+	psm3/psm_stats.h psm3/psm_sysbuf.c psm3/psm_sysbuf.h \
+	psm3/psm_timer.c psm3/psm_timer.h psm3/psm_uffd.c \
+	psm3/psm_uffd.h psm3/psm_user.h psm3/psm_utils.c \
+	psm3/psm_utils.h psm3/psm_verbs_mr.c psm3/psm_verbs_mr.h \
+	psm3/psmi_wrappers.c psm3/psmi_wrappers.h psm3/psm2.h \
+	psm3/psm2_am.h psm3/psm2_hal.c psm3/psm2_hal_loopback.c \
+	psm3/psm2_hal.h psm3/psm2_hal_loopback.h \
+	psm3/psm2_hal_inline_t.h psm3/psm2_mq.h psm3/ptl.h
 @HAVE_PSM3_SRC_TRUE@am_psm3_libpsm3i_la_OBJECTS =  \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_am.lo \
@@ -276,7 +291,6 @@ am__psm3_libpsm3i_la_SOURCES_DIST = psm3/psm.c psm3/psm_am.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq_recv.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_mq_utils.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_nic_select.lo \
-@HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_oneapi_ze.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_perf.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_rndv_mod.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/libpsm3i_la-psm_stats.lo \
@@ -298,16 +312,11 @@ psm3_libpsm3i_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 @HAVE_PSM3_SRC_TRUE@am_psm3_libpsm3i_la_rpath =
 psm3_libptl_am_la_LIBADD =
 am__psm3_libptl_am_la_SOURCES_DIST = psm3/ptl_am/am_config.h \
-	psm3/ptl_am/am_cuda_memhandle_cache.c \
-	psm3/ptl_am/am_cuda_memhandle_cache.h \
-	psm3/ptl_am/am_oneapi_memhandle_cache.c \
-	psm3/ptl_am/am_oneapi_memhandle_cache.h \
 	psm3/ptl_am/am_reqrep.c psm3/ptl_am/am_reqrep_shmem.c \
 	psm3/ptl_am/cmarw.h psm3/ptl_am/cmarwu.c \
 	psm3/ptl_am/psm_am_internal.h psm3/ptl_am/ptl.c \
 	psm3/ptl_am/ptl_fwd.h
-@HAVE_PSM3_SRC_TRUE@am_psm3_libptl_am_la_OBJECTS = psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo \
-@HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo \
+@HAVE_PSM3_SRC_TRUE@am_psm3_libptl_am_la_OBJECTS =  \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/libptl_am_la-am_reqrep.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/libptl_am_la-am_reqrep_shmem.lo \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/libptl_am_la-cmarwu.lo \
@@ -566,7 +575,6 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo \
-	psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo \
@@ -576,6 +584,9 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_utils.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo \
 	psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo \
+	psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Plo \
+	psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Plo \
+	psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo \
 	psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo \
@@ -591,8 +602,6 @@ am__depfiles_remade = psm3/$(DEPDIR)/libpsm3i_la-psm.Plo \
 	psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_rcvthread.Plo \
 	psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_recvhdrq.Plo \
 	psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_service.Plo \
-	psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Plo \
-	psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Plo \
 	psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep.Plo \
 	psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep_shmem.Plo \
 	psm3/ptl_am/$(DEPDIR)/libptl_am_la-cmarwu.Plo \
@@ -717,14 +726,15 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(psm3_libhal_sockets_la_SOURCES) \
+SOURCES = $(psm3_libgpu_la_SOURCES) $(psm3_libhal_sockets_la_SOURCES) \
 	$(psm3_libhal_verbs_la_SOURCES) $(psm3_libpsm3i_la_SOURCES) \
 	$(nodist_psm3_libpsm3i_la_SOURCES) \
 	$(psm3_libptl_am_la_SOURCES) $(psm3_libptl_ips_la_SOURCES) \
 	$(psm3_libptl_self_la_SOURCES) $(psm3_libutils_la_SOURCES) \
 	$(src_libpsm3_fi_la_SOURCES) \
 	$(nodist_src_libpsm3_fi_la_SOURCES)
-DIST_SOURCES = $(am__psm3_libhal_sockets_la_SOURCES_DIST) \
+DIST_SOURCES = $(am__psm3_libgpu_la_SOURCES_DIST) \
+	$(am__psm3_libhal_sockets_la_SOURCES_DIST) \
 	$(am__psm3_libhal_verbs_la_SOURCES_DIST) \
 	$(am__psm3_libpsm3i_la_SOURCES_DIST) \
 	$(am__psm3_libptl_am_la_SOURCES_DIST) \
@@ -773,10 +783,10 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/config.h.in \
 	$(top_srcdir)/config/missing \
 	$(top_srcdir)/psm3/psm2_hal_inlines_d.h.in \
 	$(top_srcdir)/psm3/psm2_hal_inlines_i.h.in \
-	$(top_srcdir)/src/psm3_revision.c.in README config/ar-lib \
-	config/compile config/config.guess config/config.sub \
-	config/depcomp config/install-sh config/ltmain.sh \
-	config/missing
+	$(top_srcdir)/src/psm3_revision.c.in COPYING README \
+	config/ar-lib config/compile config/config.guess \
+	config/config.sub config/depcomp config/install-sh \
+	config/ltmain.sh config/missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -930,7 +940,7 @@ top_srcdir = @top_srcdir@
 
 #
 # Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
-# Copyright (c) 2017-2018 Intel Corporation, Inc. All right reserved.
+# Copyright (c) 2017-2024 Intel Corporation, Inc. All right reserved.
 # Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
 # (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 #
@@ -1081,10 +1091,6 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 
 @HAVE_PSM3_SRC_TRUE@psm3_libptl_am_la_SOURCES = \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_config.h \
-@HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_cuda_memhandle_cache.c \
-@HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_cuda_memhandle_cache.h \
-@HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_oneapi_memhandle_cache.c \
-@HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_oneapi_memhandle_cache.h \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_reqrep.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/am_reqrep_shmem.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/ptl_am/cmarw.h \
@@ -1229,6 +1235,19 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@psm3_libhal_sockets_la_CFLAGS = \
 @HAVE_PSM3_SRC_TRUE@	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 
+@HAVE_PSM3_SRC_TRUE@psm3_libgpu_la_SOURCES = \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/psm_gpu_hal.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/psm_gpu_hal.h \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/psm_gpu_cuda.c \
+@HAVE_PSM3_SRC_TRUE@	psm3/gpu/psm_gpu_oneapi_ze.c
+
+@HAVE_PSM3_SRC_TRUE@psm3_libgpu_la_CPPFLAGS = \
+@HAVE_PSM3_SRC_TRUE@	-I$(top_srcdir)/psm3/gpu/ \
+@HAVE_PSM3_SRC_TRUE@	$(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
+
+@HAVE_PSM3_SRC_TRUE@psm3_libgpu_la_CFLAGS = \
+@HAVE_PSM3_SRC_TRUE@	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
+
 @HAVE_PSM3_SRC_TRUE@psm3_libpsm3i_la_SOURCES = \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_am.c \
@@ -1256,7 +1275,6 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_netutils.h \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_nic_select.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_nic_select.h \
-@HAVE_PSM3_SRC_TRUE@	psm3/psm_oneapi_ze.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_perf.c \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_perf.h \
 @HAVE_PSM3_SRC_TRUE@	psm3/psm_rndv_mod.c \
@@ -1303,6 +1321,7 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_ips.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_self.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_verbs.la \
+@HAVE_PSM3_SRC_TRUE@	psm3/libgpu.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_sockets.la
 
 @HAVE_PSM3_SRC_TRUE@psm3_libpsm3i_la_DEPENDENCIES = \
@@ -1311,6 +1330,7 @@ chksum_srcs = $(src_libpsm3_fi_la_SOURCES) $(am__append_11) \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_ips.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libptl_self.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_verbs.la \
+@HAVE_PSM3_SRC_TRUE@	psm3/libgpu.la \
 @HAVE_PSM3_SRC_TRUE@	psm3/libhal_sockets.la
 
 @HAVE_PSM3_SRC_TRUE@_psm3_extra_dist = \
@@ -1448,6 +1468,24 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+psm3/gpu/$(am__dirstamp):
+	@$(MKDIR_P) psm3/gpu
+	@: > psm3/gpu/$(am__dirstamp)
+psm3/gpu/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) psm3/gpu/$(DEPDIR)
+	@: > psm3/gpu/$(DEPDIR)/$(am__dirstamp)
+psm3/gpu/libgpu_la-psm_gpu_hal.lo: psm3/gpu/$(am__dirstamp) \
+	psm3/gpu/$(DEPDIR)/$(am__dirstamp)
+psm3/gpu/libgpu_la-psm_gpu_cuda.lo: psm3/gpu/$(am__dirstamp) \
+	psm3/gpu/$(DEPDIR)/$(am__dirstamp)
+psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo: psm3/gpu/$(am__dirstamp) \
+	psm3/gpu/$(DEPDIR)/$(am__dirstamp)
+psm3/$(am__dirstamp):
+	@$(MKDIR_P) psm3
+	@: > psm3/$(am__dirstamp)
+
+psm3/libgpu.la: $(psm3_libgpu_la_OBJECTS) $(psm3_libgpu_la_DEPENDENCIES) $(EXTRA_psm3_libgpu_la_DEPENDENCIES) psm3/$(am__dirstamp)
+	$(AM_V_CCLD)$(psm3_libgpu_la_LINK) $(am_psm3_libgpu_la_rpath) $(psm3_libgpu_la_OBJECTS) $(psm3_libgpu_la_LIBADD) $(LIBS)
 psm3/hal_sockets/$(am__dirstamp):
 	@$(MKDIR_P) psm3/hal_sockets
 	@: > psm3/hal_sockets/$(am__dirstamp)
@@ -1478,9 +1516,6 @@ psm3/hal_sockets/libhal_sockets_la-sockets_rcvthread.lo:  \
 psm3/hal_sockets/libhal_sockets_la-sockets_recvhdrq.lo:  \
 	psm3/hal_sockets/$(am__dirstamp) \
 	psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
-psm3/$(am__dirstamp):
-	@$(MKDIR_P) psm3
-	@: > psm3/$(am__dirstamp)
 
 psm3/libhal_sockets.la: $(psm3_libhal_sockets_la_OBJECTS) $(psm3_libhal_sockets_la_DEPENDENCIES) $(EXTRA_psm3_libhal_sockets_la_DEPENDENCIES) psm3/$(am__dirstamp)
 	$(AM_V_CCLD)$(psm3_libhal_sockets_la_LINK) $(am_psm3_libhal_sockets_la_rpath) $(psm3_libhal_sockets_la_OBJECTS) $(psm3_libhal_sockets_la_LIBADD) $(LIBS)
@@ -1545,8 +1580,6 @@ psm3/libpsm3i_la-psm_mq_utils.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_nic_select.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
-psm3/libpsm3i_la-psm_oneapi_ze.lo: psm3/$(am__dirstamp) \
-	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_perf.lo: psm3/$(am__dirstamp) \
 	psm3/$(DEPDIR)/$(am__dirstamp)
 psm3/libpsm3i_la-psm_rndv_mod.lo: psm3/$(am__dirstamp) \
@@ -1578,12 +1611,6 @@ psm3/ptl_am/$(am__dirstamp):
 psm3/ptl_am/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) psm3/ptl_am/$(DEPDIR)
 	@: > psm3/ptl_am/$(DEPDIR)/$(am__dirstamp)
-psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo:  \
-	psm3/ptl_am/$(am__dirstamp) \
-	psm3/ptl_am/$(DEPDIR)/$(am__dirstamp)
-psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo:  \
-	psm3/ptl_am/$(am__dirstamp) \
-	psm3/ptl_am/$(DEPDIR)/$(am__dirstamp)
 psm3/ptl_am/libptl_am_la-am_reqrep.lo: psm3/ptl_am/$(am__dirstamp) \
 	psm3/ptl_am/$(DEPDIR)/$(am__dirstamp)
 psm3/ptl_am/libptl_am_la-am_reqrep_shmem.lo:  \
@@ -1916,6 +1943,8 @@ mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f psm3/*.$(OBJEXT)
 	-rm -f psm3/*.lo
+	-rm -f psm3/gpu/*.$(OBJEXT)
+	-rm -f psm3/gpu/*.lo
 	-rm -f psm3/hal_sockets/*.$(OBJEXT)
 	-rm -f psm3/hal_sockets/*.lo
 	-rm -f psm3/hal_verbs/*.$(OBJEXT)
@@ -1960,7 +1989,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo@am__quote@ # am--include-marker
@@ -1970,6 +1998,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_utils.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo@am__quote@ # am--include-marker
@@ -1985,8 +2016,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_rcvthread.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_recvhdrq.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_service.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep_shmem.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@psm3/ptl_am/$(DEPDIR)/libptl_am_la-cmarwu.Plo@am__quote@ # am--include-marker
@@ -2122,6 +2151,27 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+psm3/gpu/libgpu_la-psm_gpu_hal.lo: psm3/gpu/psm_gpu_hal.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libgpu_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libgpu_la_CFLAGS) $(CFLAGS) -MT psm3/gpu/libgpu_la-psm_gpu_hal.lo -MD -MP -MF psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Tpo -c -o psm3/gpu/libgpu_la-psm_gpu_hal.lo `test -f 'psm3/gpu/psm_gpu_hal.c' || echo '$(srcdir)/'`psm3/gpu/psm_gpu_hal.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Tpo psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/gpu/psm_gpu_hal.c' object='psm3/gpu/libgpu_la-psm_gpu_hal.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libgpu_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libgpu_la_CFLAGS) $(CFLAGS) -c -o psm3/gpu/libgpu_la-psm_gpu_hal.lo `test -f 'psm3/gpu/psm_gpu_hal.c' || echo '$(srcdir)/'`psm3/gpu/psm_gpu_hal.c
+
+psm3/gpu/libgpu_la-psm_gpu_cuda.lo: psm3/gpu/psm_gpu_cuda.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libgpu_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libgpu_la_CFLAGS) $(CFLAGS) -MT psm3/gpu/libgpu_la-psm_gpu_cuda.lo -MD -MP -MF psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Tpo -c -o psm3/gpu/libgpu_la-psm_gpu_cuda.lo `test -f 'psm3/gpu/psm_gpu_cuda.c' || echo '$(srcdir)/'`psm3/gpu/psm_gpu_cuda.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Tpo psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/gpu/psm_gpu_cuda.c' object='psm3/gpu/libgpu_la-psm_gpu_cuda.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libgpu_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libgpu_la_CFLAGS) $(CFLAGS) -c -o psm3/gpu/libgpu_la-psm_gpu_cuda.lo `test -f 'psm3/gpu/psm_gpu_cuda.c' || echo '$(srcdir)/'`psm3/gpu/psm_gpu_cuda.c
+
+psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo: psm3/gpu/psm_gpu_oneapi_ze.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libgpu_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libgpu_la_CFLAGS) $(CFLAGS) -MT psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo -MD -MP -MF psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Tpo -c -o psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo `test -f 'psm3/gpu/psm_gpu_oneapi_ze.c' || echo '$(srcdir)/'`psm3/gpu/psm_gpu_oneapi_ze.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Tpo psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/gpu/psm_gpu_oneapi_ze.c' object='psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libgpu_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libgpu_la_CFLAGS) $(CFLAGS) -c -o psm3/gpu/libgpu_la-psm_gpu_oneapi_ze.lo `test -f 'psm3/gpu/psm_gpu_oneapi_ze.c' || echo '$(srcdir)/'`psm3/gpu/psm_gpu_oneapi_ze.c
 
 psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo: psm3/hal_sockets/sockets_ep.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libhal_sockets_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libhal_sockets_la_CFLAGS) $(CFLAGS) -MT psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo -MD -MP -MF psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Tpo -c -o psm3/hal_sockets/libhal_sockets_la-sockets_ep.lo `test -f 'psm3/hal_sockets/sockets_ep.c' || echo '$(srcdir)/'`psm3/hal_sockets/sockets_ep.c
@@ -2326,13 +2376,6 @@ psm3/libpsm3i_la-psm_nic_select.lo: psm3/psm_nic_select.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm_nic_select.lo `test -f 'psm3/psm_nic_select.c' || echo '$(srcdir)/'`psm3/psm_nic_select.c
 
-psm3/libpsm3i_la-psm_oneapi_ze.lo: psm3/psm_oneapi_ze.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -MT psm3/libpsm3i_la-psm_oneapi_ze.lo -MD -MP -MF psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Tpo -c -o psm3/libpsm3i_la-psm_oneapi_ze.lo `test -f 'psm3/psm_oneapi_ze.c' || echo '$(srcdir)/'`psm3/psm_oneapi_ze.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Tpo psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/psm_oneapi_ze.c' object='psm3/libpsm3i_la-psm_oneapi_ze.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm_oneapi_ze.lo `test -f 'psm3/psm_oneapi_ze.c' || echo '$(srcdir)/'`psm3/psm_oneapi_ze.c
-
 psm3/libpsm3i_la-psm_perf.lo: psm3/psm_perf.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -MT psm3/libpsm3i_la-psm_perf.lo -MD -MP -MF psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Tpo -c -o psm3/libpsm3i_la-psm_perf.lo `test -f 'psm3/psm_perf.c' || echo '$(srcdir)/'`psm3/psm_perf.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Tpo psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
@@ -2409,20 +2452,6 @@ psm3/libpsm3i_la-psm2_hal_loopback.lo: psm3/psm2_hal_loopback.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/psm2_hal_loopback.c' object='psm3/libpsm3i_la-psm2_hal_loopback.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libpsm3i_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libpsm3i_la_CFLAGS) $(CFLAGS) -c -o psm3/libpsm3i_la-psm2_hal_loopback.lo `test -f 'psm3/psm2_hal_loopback.c' || echo '$(srcdir)/'`psm3/psm2_hal_loopback.c
-
-psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo: psm3/ptl_am/am_cuda_memhandle_cache.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libptl_am_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libptl_am_la_CFLAGS) $(CFLAGS) -MT psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo -MD -MP -MF psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Tpo -c -o psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo `test -f 'psm3/ptl_am/am_cuda_memhandle_cache.c' || echo '$(srcdir)/'`psm3/ptl_am/am_cuda_memhandle_cache.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Tpo psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/ptl_am/am_cuda_memhandle_cache.c' object='psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libptl_am_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libptl_am_la_CFLAGS) $(CFLAGS) -c -o psm3/ptl_am/libptl_am_la-am_cuda_memhandle_cache.lo `test -f 'psm3/ptl_am/am_cuda_memhandle_cache.c' || echo '$(srcdir)/'`psm3/ptl_am/am_cuda_memhandle_cache.c
-
-psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo: psm3/ptl_am/am_oneapi_memhandle_cache.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libptl_am_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libptl_am_la_CFLAGS) $(CFLAGS) -MT psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo -MD -MP -MF psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Tpo -c -o psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo `test -f 'psm3/ptl_am/am_oneapi_memhandle_cache.c' || echo '$(srcdir)/'`psm3/ptl_am/am_oneapi_memhandle_cache.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Tpo psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='psm3/ptl_am/am_oneapi_memhandle_cache.c' object='psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libptl_am_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libptl_am_la_CFLAGS) $(CFLAGS) -c -o psm3/ptl_am/libptl_am_la-am_oneapi_memhandle_cache.lo `test -f 'psm3/ptl_am/am_oneapi_memhandle_cache.c' || echo '$(srcdir)/'`psm3/ptl_am/am_oneapi_memhandle_cache.c
 
 psm3/ptl_am/libptl_am_la-am_reqrep.lo: psm3/ptl_am/am_reqrep.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(psm3_libptl_am_la_CPPFLAGS) $(CPPFLAGS) $(psm3_libptl_am_la_CFLAGS) $(CFLAGS) -MT psm3/ptl_am/libptl_am_la-am_reqrep.lo -MD -MP -MF psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep.Tpo -c -o psm3/ptl_am/libptl_am_la-am_reqrep.lo `test -f 'psm3/ptl_am/am_reqrep.c' || echo '$(srcdir)/'`psm3/ptl_am/am_reqrep.c
@@ -3165,6 +3194,7 @@ mostlyclean-libtool:
 clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf psm3/.libs psm3/_libs
+	-rm -rf psm3/gpu/.libs psm3/gpu/_libs
 	-rm -rf psm3/hal_sockets/.libs psm3/hal_sockets/_libs
 	-rm -rf psm3/hal_verbs/.libs psm3/hal_verbs/_libs
 	-rm -rf psm3/ptl_am/.libs psm3/ptl_am/_libs
@@ -3517,6 +3547,8 @@ distclean-generic:
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f psm3/$(DEPDIR)/$(am__dirstamp)
 	-rm -f psm3/$(am__dirstamp)
+	-rm -f psm3/gpu/$(DEPDIR)/$(am__dirstamp)
+	-rm -f psm3/gpu/$(am__dirstamp)
 	-rm -f psm3/hal_sockets/$(DEPDIR)/$(am__dirstamp)
 	-rm -f psm3/hal_sockets/$(am__dirstamp)
 	-rm -f psm3/hal_verbs/$(DEPDIR)/$(am__dirstamp)
@@ -3570,7 +3602,6 @@ distclean: distclean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo
-	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo
@@ -3580,6 +3611,9 @@ distclean: distclean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_utils.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo
+	-rm -f psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Plo
+	-rm -f psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Plo
+	-rm -f psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo
@@ -3595,8 +3629,6 @@ distclean: distclean-am
 	-rm -f psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_rcvthread.Plo
 	-rm -f psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_recvhdrq.Plo
 	-rm -f psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_service.Plo
-	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Plo
-	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Plo
 	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep.Plo
 	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep_shmem.Plo
 	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-cmarwu.Plo
@@ -3766,7 +3798,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_recv.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_mq_utils.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_nic_select.Plo
-	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_oneapi_ze.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_perf.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_rndv_mod.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_stats.Plo
@@ -3776,6 +3807,9 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_utils.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psm_verbs_mr.Plo
 	-rm -f psm3/$(DEPDIR)/libpsm3i_la-psmi_wrappers.Plo
+	-rm -f psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_cuda.Plo
+	-rm -f psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_hal.Plo
+	-rm -f psm3/gpu/$(DEPDIR)/libgpu_la-psm_gpu_oneapi_ze.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_ep.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_gdrcpy.Plo
 	-rm -f psm3/hal_sockets/$(DEPDIR)/libhal_sockets_la-sockets_hal.Plo
@@ -3791,8 +3825,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_rcvthread.Plo
 	-rm -f psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_recvhdrq.Plo
 	-rm -f psm3/hal_verbs/$(DEPDIR)/libhal_verbs_la-verbs_service.Plo
-	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_cuda_memhandle_cache.Plo
-	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_oneapi_memhandle_cache.Plo
 	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep.Plo
 	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-am_reqrep_shmem.Plo
 	-rm -f psm3/ptl_am/$(DEPDIR)/libptl_am_la-cmarwu.Plo

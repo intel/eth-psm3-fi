@@ -117,8 +117,6 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_SOCKADDR_IN6, len);
 	CASEENUMSTRN(FI_SOCKADDR_IB, len);
 	CASEENUMSTRN(FI_ADDR_PSMX2, len);
-	CASEENUMSTRN(FI_ADDR_GNI, len);
-	CASEENUMSTRN(FI_ADDR_BGQ, len);
 	CASEENUMSTRN(FI_ADDR_MLX, len);
 	CASEENUMSTRN(FI_ADDR_UCX, len);
 	CASEENUMSTRN(FI_ADDR_STR, len);
@@ -128,10 +126,7 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_ADDR_OPX, len);
 	CASEENUMSTRN(FI_ADDR_CXI, len);
 	default:
-		if (addr_format & FI_PROV_SPECIFIC)
-			ofi_strncatf(buf, len, "Provider specific");
-		else
-			ofi_strncatf(buf, len, "Unknown");
+		ofi_strncatf(buf, len, "Unknown");
 		break;
 	}
 }
@@ -142,6 +137,7 @@ static void ofi_tostr_progress(char *buf, size_t len, enum fi_progress progress)
 	CASEENUMSTRN(FI_PROGRESS_UNSPEC, len);
 	CASEENUMSTRN(FI_PROGRESS_AUTO, len);
 	CASEENUMSTRN(FI_PROGRESS_MANUAL, len);
+	CASEENUMSTRN(FI_PROGRESS_CONTROL_UNIFIED, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -221,7 +217,6 @@ static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 	IFFLAGSTRN(caps, FI_TRIGGER, len);
 	IFFLAGSTRN(caps, FI_FENCE, len);
 
-	IFFLAGSTRN(caps, FI_VARIABLE_MSG, len);
 	IFFLAGSTRN(caps, FI_RMA_PMEM, len);
 	IFFLAGSTRN(caps, FI_SOURCE_ERR, len);
 	IFFLAGSTRN(caps, FI_LOCAL_COMM, len);
@@ -243,8 +238,6 @@ static void ofi_tostr_ep_type(char *buf, size_t len, enum fi_ep_type ep_type)
 	CASEENUMSTRN(FI_EP_MSG, len);
 	CASEENUMSTRN(FI_EP_DGRAM, len);
 	CASEENUMSTRN(FI_EP_RDM, len);
-	CASEENUMSTRN(FI_EP_SOCK_STREAM, len);
-	CASEENUMSTRN(FI_EP_SOCK_DGRAM, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -263,14 +256,12 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_SOCK_TCP, len);
 	CASEENUMSTRN(FI_PROTO_IB_RDM, len);
 	CASEENUMSTRN(FI_PROTO_IWARP_RDM, len);
-	CASEENUMSTRN(FI_PROTO_GNI, len);
 	CASEENUMSTRN(FI_PROTO_RXM, len);
 	CASEENUMSTRN(FI_PROTO_RXD, len);
 	CASEENUMSTRN(FI_PROTO_MLX, len);
 	CASEENUMSTRN(FI_PROTO_UCX, len);
 	CASEENUMSTRN(FI_PROTO_NETWORKDIRECT, len);
 	CASEENUMSTRN(FI_PROTO_SHM, len);
-	CASEENUMSTRN(FI_PROTO_RSTREAM, len);
 	CASEENUMSTRN(FI_PROTO_RDMA_CM_IB_XRC, len);
 	CASEENUMSTRN(FI_PROTO_EFA, len);
 	CASEENUMSTRN(FI_PROTO_PSMX3, len);
@@ -279,11 +270,9 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_CXI, len);
 	CASEENUMSTRN(FI_PROTO_XNET, len);
 	CASEENUMSTRN(FI_PROTO_SM2, len);
+	CASEENUMSTRN(FI_PROTO_CXI_RNR, len);
 	default:
-		if (protocol & FI_PROV_SPECIFIC)
-			ofi_strncatf(buf, len, "Provider specific");
-		else
-			ofi_strncatf(buf, len, "Unknown");
+		ofi_strncatf(buf, len, "Unknown");
 		break;
 	}
 }
@@ -295,8 +284,6 @@ static void ofi_tostr_mode(char *buf, size_t len, uint64_t mode)
 	IFFLAGSTRN(mode, FI_ASYNC_IOV, len);
 	IFFLAGSTRN(mode, FI_RX_CQ_DATA, len);
 	IFFLAGSTRN(mode, FI_LOCAL_MR, len);
-	IFFLAGSTRN(mode, FI_NOTIFY_FLAGS_ONLY, len);
-	IFFLAGSTRN(mode, FI_RESTRICTED_COMP, len);
 	IFFLAGSTRN(mode, FI_CONTEXT2, len);
 	IFFLAGSTRN(mode, FI_BUFFERED_RECV, len);
 
@@ -909,6 +896,7 @@ ofi_tostr_cntr_events(char *buf, size_t len, enum fi_cntr_events events)
 {
 	switch (events) {
 	CASEENUMSTRN(FI_CNTR_EVENTS_COMP, len);
+	CASEENUMSTRN(FI_CNTR_EVENTS_BYTES, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;

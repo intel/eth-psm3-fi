@@ -5,8 +5,8 @@
 %define source_date_epoch_from_changelog 0
 
 Name: lib%{provider}-fi
-Version: 11.7.0.0
-Release: 110
+Version: 12.0.0.0
+Release: 36
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries
@@ -62,7 +62,7 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %{_libdir}/libfabric/%{name}*
-%doc README
+%doc README COPYING
 %exclude %{_libdir}/libfabric/*.a
 %exclude %{_libdir}/libfabric/*.la
 %exclude %{_libdir}/pkgconfig

@@ -214,6 +214,7 @@ struct util_domain {
 	struct ofi_mr_map	mr_map;
 	enum fi_threading	threading;
 	enum fi_progress	data_progress;
+	enum fi_progress	control_progress;
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
@@ -1247,6 +1248,7 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
  *     the core by calling add_credits.
  */
 #define OFI_OPS_FLOW_CTRL "ofix_flow_ctrl_v1"
+#define OFI_PRIORITY (1ULL << 62)
 
 struct ofi_ops_flow_ctrl {
 	size_t	size;
@@ -1367,6 +1369,13 @@ static inline void ofi_cq_err_memcpy(uint32_t api_version,
 			user_buf->err_data_size = err_data_size;
 		}
 	}
+}
+
+static inline enum ofi_lock_type
+ofi_progress_lock_type(enum fi_threading threading, enum fi_progress control)
+{
+	return (threading == FI_THREAD_DOMAIN || threading == FI_THREAD_COMPLETION) &&
+		control == FI_PROGRESS_CONTROL_UNIFIED ? OFI_LOCK_NOOP : OFI_LOCK_MUTEX;
 }
 
 #ifdef __cplusplus

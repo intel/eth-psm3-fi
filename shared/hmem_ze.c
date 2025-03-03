@@ -46,18 +46,24 @@
 #include <sys/ioctl.h>
 #include <linux/dma-buf.h>
 
+struct ofi_ze_dev_info {
+	ze_command_queue_handle_t cmd_queue;
+	int pci_device;
+	int ordinal;
+	int index;
+	ze_device_uuid_t uuid;
+	struct ofi_bufpool *cl_pool;
+};
+
 static ze_driver_handle_t driver;
 static ze_context_handle_t context;
-static ze_device_handle_t devices[ZE_MAX_DEVICES];
-static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
+static ze_device_handle_t *devices = NULL;
+static struct ofi_ze_dev_info *dev_info = NULL;
 static int num_devices = 0;
-static int ordinals[ZE_MAX_DEVICES];
-static int indices[ZE_MAX_DEVICES];
-static int dev_fds[ZE_MAX_DEVICES];
-static ze_device_uuid_t dev_uuids[ZE_MAX_DEVICES];
+static int num_pci_devices = 0;
+static int *dev_fds = NULL;
 static bool p2p_enabled = false;
 static bool host_reg_enabled = true;
-static struct ofi_bufpool *cl_pool[ZE_MAX_DEVICES];
 ofi_spin_t cl_lock;
 
 static ze_command_queue_desc_t cq_desc = {
@@ -383,7 +389,11 @@ static int ze_hmem_init_fds(void)
 	DIR *dir;
 	struct dirent *ent = NULL;
 	char dev_name[NAME_MAX];
-	int i = 0, ret;
+	int ret, i;
+	char *str;
+	uint16_t domain_id;
+	uint8_t pci_id;
+	char *saveptr;
 
 	dir = opendir(dev_dir);
 	if (dir == NULL)
@@ -399,26 +409,38 @@ static int ze_hmem_init_fds(void)
 		if (ret < 0 || ret >= NAME_MAX)
 			goto err;
 
-		dev_fds[i] = open(dev_name, O_RDWR);
-		if (dev_fds[i] == -1)
+		dev_fds[num_pci_devices] = open(dev_name, O_RDWR);
+		if (dev_fds[num_pci_devices] == -1)
 			goto err;
-		i++;
+		str = strtok_r(ent->d_name, "-", &saveptr);
+		str = strtok_r(NULL, ":", &saveptr);
+		domain_id = (uint16_t) strtol(str, NULL, 16);
+		str = strtok_r(NULL, ":", &saveptr);
+		pci_id = (uint8_t) strtol(str, NULL, 16);
+		for (i = 0; i < num_devices; i++) {
+			if (dev_info[i].uuid.id[8] == pci_id &&
+			    (uint16_t) dev_info[i].uuid.id[6] == domain_id)
+				dev_info[i].pci_device = num_pci_devices;
+		}
+		num_pci_devices++;
 	}
+
 	(void) closedir(dir);
 	return FI_SUCCESS;
 
 err:
 	(void) closedir(dir);
 	FI_WARN(&core_prov, FI_LOG_CORE,
-		"Failed open device %d\n", i);
+		"Failed open device %d\n", num_pci_devices);
 	return -FI_EIO;
 }
 
-int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+int ze_hmem_get_shared_handle(uint64_t device, void *dev_buf, int *ze_fd,
 			      void **handle)
 {
 	struct drm_prime_handle open_fd = {0, 0, 0};
 	ze_ipc_mem_handle_t ze_handle;
+	int dev_fd = dev_fds[dev_info[device].pci_device];
 	int ret;
 
 	assert(dev_fd != -1);
@@ -439,11 +461,12 @@ int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
 	return FI_SUCCESS;
 }
 
-int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
-			       uint64_t device, void **ipc_ptr)
+int ze_hmem_open_shared_handle(uint64_t device, int *peer_fds, void **handle,
+			       int *ze_fd, void **ipc_ptr)
 {
 	struct drm_prime_handle open_fd = {0, 0, 0};
 	ze_ipc_mem_handle_t ze_handle;
+	int dev_fd = peer_fds[dev_info[device].pci_device];
 	int ret;
 
 	open_fd.flags = DRM_CLOEXEC | DRM_RDWR;
@@ -474,13 +497,14 @@ static int ze_hmem_init_fds(void)
 	return FI_SUCCESS;
 }
 
-int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+int ze_hmem_get_shared_handle(uint64_t device, void *dev_buf, int *ze_fd,
 			      void **handle)
 {
 	return -FI_ENOSYS;
 }
-int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
-			       uint64_t device, void **ipc_ptr)
+
+int ze_hmem_open_shared_handle(uint64_t device, int *peer_fds, void **handle,
+			       int *ze_fd, void **ipc_ptr)
 {
 	return -FI_ENOSYS;
 }
@@ -495,7 +519,7 @@ bool ze_hmem_p2p_enabled(void)
 static int ze_hmem_dl_init(void)
 {
 #if ENABLE_ZE_DLOPEN
-	libze_handle = dlopen("libze_loader.so", RTLD_NOW);
+	libze_handle = dlopen("libze_loader.so.1", RTLD_NOW);
 	if (!libze_handle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to dlopen libze_loader.so\n");
@@ -727,20 +751,24 @@ static int ze_hmem_cleanup_internal(int fini_workaround)
 
 	for (i = 0; i < num_devices; i++) {
 		if (!fini_workaround) {
-			if (cmd_queue[i] &&
-			    ofi_zeCommandQueueDestroy(cmd_queue[i])) {
+			if (dev_info[i].cmd_queue &&
+			    ofi_zeCommandQueueDestroy(dev_info[i].cmd_queue)) {
 				FI_WARN(&core_prov, FI_LOG_CORE,
 					"Failed to destroy ZE cmd_queue\n");
 				ret = -FI_EINVAL;
 			}
 		}
-		if (cl_pool[i])
-			ofi_bufpool_destroy(cl_pool[i]);
+		if (dev_info[i].cl_pool)
+			ofi_bufpool_destroy(dev_info[i].cl_pool);
 		if (dev_fds[i] != -1) {
 			close(dev_fds[i]);
 			dev_fds[i] = -1;
 		}
 	}
+
+	free(devices);
+	free(dev_info);
+	free(dev_fds);
 
 	if (!fini_workaround) {
 		if (ofi_zeContextDestroy(context))
@@ -770,10 +798,13 @@ int ze_hmem_init(void)
 	int ordinal = -1;
 	int index = 0;
 
+	if (hmem_ops[FI_HMEM_ZE].initialized)
+		return FI_SUCCESS;
+
 	fi_param_define(NULL, "hmem_ze_copy_engine", FI_PARAM_STRING,
                         "Specify GPU engine used for copy operation: <group>, "
 			"<group>.<index> (default: 1st copy-only engine)");
-        fi_param_get_str(NULL, "log_level", &enginestr);
+        fi_param_get_str(NULL, "hmem_ze_copy_engine", &enginestr);
 	if (enginestr)
 		sscanf(enginestr, "%d.%d", &ordinal, &index);
 
@@ -810,37 +841,38 @@ int ze_hmem_init(void)
 	if (ze_ret)
 		return -FI_EIO;
 
-	for (i = 0; i < ZE_MAX_DEVICES; dev_fds[i++] = -1)
-		;
-
 	count = 0;
 	ze_ret = ofi_zeDeviceGet(driver, &count, NULL);
-	if (ze_ret || count > ZE_MAX_DEVICES)
+	if (ze_ret)
+		goto err;
+
+	devices = calloc(count, sizeof(*devices));
+	dev_info = calloc(count, sizeof(*dev_info));
+	dev_fds = calloc(count, sizeof(*dev_fds));
+	if (!devices || !dev_info || !dev_fds)
 		goto err;
 
 	ze_ret = ofi_zeDeviceGet(driver, &count, devices);
 	if (ze_ret)
 		goto err;
 
-	ret = ze_hmem_init_fds();
-	if (ret)
-		goto err;
+	for (i = 0; i < count; dev_fds[i++] = -1)
+		;
 
 	for (num_devices = 0; num_devices < count; num_devices++) {
-		cl_pool[num_devices] = NULL;
+		dev_info[num_devices].cl_pool = NULL;
 		ze_ret = ofi_zeDeviceGetProperties(devices[num_devices],
 						   &dev_prop);
 		if (ze_ret)
 			goto err;
 
-		memcpy(&dev_uuids[num_devices], &dev_prop.uuid,
-		       sizeof(*dev_uuids));
+		dev_info[num_devices].uuid = dev_prop.uuid;
 
-		ordinals[num_devices] = ordinal;
-		indices[num_devices] = index;
+		dev_info[num_devices].ordinal = ordinal;
+		dev_info[num_devices].index = index;
 		ze_ret = ze_hmem_find_copy_only_engine(num_devices,
-						       &ordinals[num_devices],
-						       &indices[num_devices]);
+						&dev_info[num_devices].ordinal,
+						&dev_info[num_devices].index);
 		if (ze_ret)
 			goto err;
 
@@ -850,6 +882,10 @@ int ze_hmem_init(void)
 				p2p = false;
 		}
 	}
+
+	ret = ze_hmem_init_fds();
+	if (ret)
+		goto err;
 
 	p2p_enabled = p2p;
 	return FI_SUCCESS;
@@ -867,7 +903,7 @@ static int ze_cl_alloc_fn(struct ofi_bufpool_region *region)
 	uint64_t dev_id = (uint64_t) region->pool->attr.context;
 	ze_result_t ze_ret;
 
-	cl_desc.commandQueueGroupOrdinal = ordinals[dev_id];
+	cl_desc.commandQueueGroupOrdinal = dev_info[dev_id].ordinal;
 	ze_ret = ofi_zeCommandListCreate(context, devices[dev_id], &cl_desc,
 			(ze_command_list_handle_t *) region->mem_region);
 	return ze_ret ? -FI_EINVAL : FI_SUCCESS;
@@ -895,16 +931,16 @@ static ze_result_t ze_init_res(int dev_id)
 		.flags		= 0,
 	};
 
-	cq_desc.ordinal = ordinals[dev_id];
-	cq_desc.index = indices[dev_id];
+	cq_desc.ordinal = dev_info[dev_id].ordinal;
+	cq_desc.index = dev_info[dev_id].index;
 	ze_ret = ofi_zeCommandQueueCreate(context,
 					  devices[dev_id],
 					  &cq_desc,
-					  &cmd_queue[dev_id]);
+					  &dev_info[dev_id].cmd_queue);
 	if (ze_ret)
 		return ze_ret;
 
-	return ofi_bufpool_create_attr(&attr, &cl_pool[dev_id]);
+	return ofi_bufpool_create_attr(&attr, &dev_info[dev_id].cl_pool);
 }
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
@@ -922,7 +958,7 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	}
 
 	ofi_spin_lock(&cl_lock);
-	if (!cmd_queue[dev_id]) {
+	if (!dev_info[dev_id].cmd_queue) {
 		ze_ret = ze_init_res(dev_id);
 		if (ze_ret) {
 			ofi_spin_unlock(&cl_lock);
@@ -930,7 +966,7 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 		}
 	}
 
-	cmd_list = ofi_buf_alloc(cl_pool[dev_id]);
+	cmd_list = ofi_buf_alloc(dev_info[dev_id].cl_pool);
 	ofi_spin_unlock(&cl_lock);
 	if (!cmd_list)
 		goto out;
@@ -948,8 +984,9 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	if (ze_ret)
 		goto free;
 
-	ze_ret = ofi_zeCommandQueueExecuteCommandLists(cmd_queue[dev_id], 1,
-						       cmd_list, NULL);
+	ze_ret = ofi_zeCommandQueueExecuteCommandLists(
+						dev_info[dev_id].cmd_queue, 1,
+						cmd_list, NULL);
 
 free:
 	ofi_spin_lock(&cl_lock);
@@ -998,8 +1035,8 @@ bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 		return false;
 
 	for (i = 0, *device = 0; i < num_devices; i++) {
-		if (!memcmp(&dev_prop.uuid, &dev_uuids[i],
-			    sizeof(*dev_uuids))) {
+		if (!memcmp(&dev_prop.uuid, &dev_info[i].uuid,
+			    sizeof(dev_info[i].uuid))) {
 			*device = i;
 			return true;
 		}
@@ -1099,7 +1136,7 @@ int ze_hmem_get_id(const void *ptr, uint64_t *id)
 
 int *ze_hmem_get_dev_fds(int *nfds)
 {
-	*nfds = num_devices;
+	*nfds = num_pci_devices;
 	return dev_fds;
 }
 
@@ -1358,14 +1395,14 @@ int ze_hmem_open_handle(void **handle, size_t size, uint64_t device,
 	return -FI_ENOSYS;
 }
 
-int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+int ze_hmem_get_shared_handle(uint64_t device, void *dev_buf, int *ze_fd,
 			      void **handle)
 {
 	return -FI_ENOSYS;
 }
 
-int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
-			       uint64_t device, void **ipc_ptr)
+int ze_hmem_open_shared_handle(uint64_t device, int *peer_fds, void **handle,
+			       int *ze_fd, void **ipc_ptr)
 {
 	return -FI_ENOSYS;
 }

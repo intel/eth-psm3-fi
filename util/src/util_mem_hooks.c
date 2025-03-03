@@ -69,6 +69,7 @@ struct ofi_memhooks memhooks = {
 	.monitor.cleanup = ofi_monitor_cleanup,
 	.monitor.start = ofi_memhooks_start,
 	.monitor.stop = ofi_memhooks_stop,
+	.monitor.name = "memhooks",
 };
 struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
 
@@ -190,13 +191,13 @@ static inline void ofi_clear_instruction_cache(uintptr_t address, size_t data_si
 #if (defined(__x86_64__) || defined(__amd64__))
 		__asm__ volatile("mfence;clflush %0;mfence"::
 				 "m" (*((char*) address + i)));
-#elif (defined(__aarch64__)
+#elif (defined(__aarch64__))
 		__asm__ volatile ("dc cvau, %0\n\t"
 			  "dsb ish\n\t"
 			  "ic ivau, %0\n\t"
 			  "dsb ish\n\t"
 			  "isb":: "r" (address + i));
-#elif (defined(__riscv) && (__riscv_xlen == 64)
+#elif (defined(__riscv) && (__riscv_xlen == 64))
 	        __riscv_flush_icache(address, address+data_size, SYS_RISCV_FLUSH_ICACHE_LOCAL);
 		__asm__ volatile ("fence.i\n");
 #endif

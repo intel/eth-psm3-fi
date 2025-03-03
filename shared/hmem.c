@@ -192,7 +192,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = rocr_dev_unregister,
 		.dev_reg_copy_to_hmem = rocr_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = rocr_dev_reg_copy_from_hmem,
-		.get_dmabuf_fd = ofi_hmem_no_get_dmabuf_fd,
+		.get_dmabuf_fd = rocr_hmem_get_dmabuf_fd,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -382,6 +382,37 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 	return done;
 }
 
+static ssize_t ofi_dev_reg_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t handle,
+					      const struct iovec *hmem_iov,
+					      size_t hmem_iov_count,
+					      uint64_t hmem_iov_offset, void *buf,
+					      size_t size, int dir)
+{
+	uint64_t done = 0, len;
+	char *hmem_buf;
+	size_t i;
+	int ret;
+
+	for (i = 0; i < hmem_iov_count && size; i++) {
+		len = ofi_iov_bytes_to_copy(&hmem_iov[i], &size,
+					    &hmem_iov_offset, &hmem_buf);
+		if (!len)
+			continue;
+
+		if (dir == OFI_COPY_BUF_TO_IOV)
+			ret = ofi_hmem_dev_reg_copy_to_hmem(hmem_iface, handle, hmem_buf,
+							    (char *)buf + done, len);
+		else
+			ret = ofi_hmem_dev_reg_copy_from_hmem(hmem_iface, handle,
+							      (char *)buf + done, hmem_buf, len);
+		if (ret)
+			return ret;
+
+		done += len;
+	}
+	return done;
+}
+
 static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
 		size_t iov_count, uint64_t offset, void *buf,
 		size_t size, int dir)
@@ -503,6 +534,27 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 				     (void *) src, size, OFI_COPY_BUF_TO_IOV);
 }
 
+ssize_t ofi_dev_reg_copy_from_hmem_iov(void *dest, size_t size,
+				       enum fi_hmem_iface hmem_iface, uint64_t handle,
+				       const struct iovec *hmem_iov,
+				       size_t hmem_iov_count,
+				       uint64_t hmem_iov_offset)
+{
+	return ofi_dev_reg_copy_hmem_iov_buf(hmem_iface, handle, hmem_iov,
+					     hmem_iov_count, hmem_iov_offset,
+					     dest, size, OFI_COPY_IOV_TO_BUF);
+}
+
+ssize_t ofi_dev_reg_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t handle,
+				     const struct iovec *hmem_iov,
+				     size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				     const void *src, size_t size)
+{
+	return ofi_dev_reg_copy_hmem_iov_buf(hmem_iface, handle, hmem_iov,
+					     hmem_iov_count, hmem_iov_offset,
+					     (void *) src, size, OFI_COPY_BUF_TO_IOV);
+}
+
 int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr,
 			size_t size, void **handle)
 {
@@ -546,13 +598,14 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 		"synapseai"
 	};
 	char *iface_filter_str_copy = strdup(iface_filter_str);
+	char *saveptr;
 
 	memset(filter, false, sizeof(bool) * ARRAY_SIZE(hmem_ops));
 
 	/* always enable system hmem interface */
 	filter[FI_HMEM_SYSTEM] = true;
 
-	entry = strtok(iface_filter_str_copy, token);
+	entry = strtok_r(iface_filter_str_copy, token, &saveptr);
 	while (entry != NULL) {
 		for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 			if (!strcasecmp(iface_labels[iface], entry)) {
@@ -567,7 +620,7 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 					entry);
 		}
 
-		entry = strtok(NULL, token);
+		entry = strtok_r(NULL, token, &saveptr);
 	}
 
 	free(iface_filter_str_copy);

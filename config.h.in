@@ -25,12 +25,6 @@
 /* Set to 1 to use c11 atomic `least` types */
 #undef HAVE_ATOMICS_LEAST_TYPES
 
-/* Ignore HAVE_BGQ */
-#undef HAVE_BGQ
-
-/* Ignore HAVE_BGQ_DL */
-#undef HAVE_BGQ_DL
-
 /* Set to 1 to use built-in intrincics atomics */
 #undef HAVE_BUILTIN_ATOMICS
 
@@ -48,6 +42,12 @@
 
 /* Define to 1 if you have the <cuda_runtime.h> header file. */
 #undef HAVE_CUDA_RUNTIME_H
+
+/* Ignore HAVE_CXI */
+#undef HAVE_CXI
+
+/* Ignore HAVE_CXI_DL */
+#undef HAVE_CXI_DL
 
 /* Define to 1 if you have the declaration of `ethtool_cmd_speed', and to 0 if
    you don't. */
@@ -93,12 +93,6 @@
 
 /* Define to 1 if you have the `getifaddrs' function. */
 #undef HAVE_GETIFADDRS
-
-/* Ignore HAVE_GNI */
-#undef HAVE_GNI
-
-/* Ignore HAVE_GNI_DL */
-#undef HAVE_GNI_DL
 
 /* Ignore HAVE_HOOK_DEBUG */
 #undef HAVE_HOOK_DEBUG
@@ -190,12 +184,6 @@
 
 /* Ignore HAVE_ROCR */
 #undef HAVE_ROCR
-
-/* Ignore HAVE_RSTREAM */
-#undef HAVE_RSTREAM
-
-/* Ignore HAVE_RSTREAM_DL */
-#undef HAVE_RSTREAM_DL
 
 /* Ignore HAVE_RXD */
 #undef HAVE_RXD
@@ -290,12 +278,6 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
-/* Ignore HAVE_USNIC */
-#undef HAVE_USNIC
-
-/* Ignore HAVE_USNIC_DL */
-#undef HAVE_USNIC_DL
-
 /* Ignore HAVE_VERBS */
 #undef HAVE_VERBS
 
@@ -343,9 +325,6 @@
 
 /* CUDA support */
 #undef PSM3_CUDA
-
-/* PSM3 built with instruction set */
-#undef PSM3_MARCH
 
 /* ZE support */
 #undef PSM3_ONEAPI

@@ -65,6 +65,7 @@ struct ofi_prov {
 	struct fi_provider	*provider;
 	void			*dlhandle;
 	bool			hidden;
+	bool			preferred;
 };
 
 enum ofi_prov_order {
@@ -79,6 +80,7 @@ struct ofi_info_match {
 
 static struct ofi_prov *prov_head, *prov_tail;
 static enum ofi_prov_order prov_order = OFI_PROV_ORDER_VERSION;
+static bool prov_preferred = false;
 int ofi_init = 0;
 extern struct ofi_common_locks common_locks;
 
@@ -109,6 +111,7 @@ ofi_init_prov(struct ofi_prov *prov, struct fi_provider *provider,
 {
 	prov->provider = provider;
 	prov->dlhandle = dlhandle;
+	prov->preferred = prov_preferred;
 }
 
 static void ofi_cleanup_prov(struct fi_provider *provider, void *dlhandle)
@@ -134,6 +137,19 @@ static void ofi_free_prov(struct ofi_prov *prov)
 	free(prov);
 }
 
+static inline bool ofi_hide_cur_prov(struct ofi_prov *cur,
+				     struct ofi_prov *new)
+{
+	if (cur->preferred)
+		return false;
+
+	if (new->preferred)
+		return true;
+
+	return (prov_order == OFI_PROV_ORDER_VERSION &&
+		FI_VERSION_LT(cur->provider->version, new->provider->version));
+}
+
 static void ofi_insert_prov(struct ofi_prov *prov)
 {
 	struct ofi_prov *cur, *prev;
@@ -141,9 +157,7 @@ static void ofi_insert_prov(struct ofi_prov *prov)
 	for (prev = NULL, cur = prov_head; cur; prev = cur, cur = cur->next) {
 		if ((strlen(prov->prov_name) == strlen(cur->prov_name)) &&
 		    !strcasecmp(prov->prov_name, cur->prov_name)) {
-			if ((prov_order == OFI_PROV_ORDER_VERSION) &&
-			    FI_VERSION_LT(cur->provider->version,
-					  prov->provider->version)) {
+			if (ofi_hide_cur_prov(cur, prov)) {
 				cur->hidden = true;
 				prov->next = cur;
 				if (prev)
@@ -445,8 +459,8 @@ static struct fi_provider *ofi_get_hook(const char *name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"efa", "psm2", "opx", "usnic", "gni", "bgq", "verbs",
-		"netdir", "psm3", "ucx", "ofi_rxm", "ofi_rxd", "shm",
+		"efa", "psm2", "opx", "usnic", "verbs", "cxi",
+		"psm3", "ucx", "ofi_rxm", "ofi_rxd", "shm",
 
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
@@ -545,6 +559,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	    !strcasecmp(provider->name, "efa") ||
 	    !strcasecmp(provider->name, "psm3") ||
 	    !strcasecmp(provider->name, "ucx") ||
+	    !strcasecmp(provider->name, "cxi") ||
 	    ofi_is_util_prov(provider))
 		ofi_prov_ctx(provider)->disable_layering = true;
 
@@ -636,7 +651,7 @@ void ofi_create_filter(struct ofi_filter *filter, const char *raw_filter)
 }
 
 #ifdef HAVE_LIBDL
-static void ofi_reg_dl_prov(const char *lib)
+static void ofi_reg_dl_prov(const char *lib, bool lib_known_to_exist)
 {
 	void *dlhandle;
 	struct fi_provider* (*inif)(void);
@@ -645,8 +660,13 @@ static void ofi_reg_dl_prov(const char *lib)
 
 	dlhandle = dlopen(lib, RTLD_NOW);
 	if (dlhandle == NULL) {
-		FI_DBG(&core_prov, FI_LOG_CORE,
-			"dlopen(%s): %s\n", lib, dlerror());
+		if (lib_known_to_exist) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"dlopen(%s): %s\n", lib, dlerror());
+		} else {
+			FI_DBG(&core_prov, FI_LOG_CORE,
+				"dlopen(%s): %s\n", lib, dlerror());
+		}
 		return;
 	}
 
@@ -675,7 +695,7 @@ static void ofi_ini_dir(const char *dir)
 			       "asprintf failed to allocate memory\n");
 			goto libdl_done;
 		}
-		ofi_reg_dl_prov(lib);
+		ofi_reg_dl_prov(lib, true);
 
 		free(liblist[n]);
 		free(lib);
@@ -716,9 +736,36 @@ static void ofi_find_prov_libs(void)
 			continue;
 		}
 
-		ofi_reg_dl_prov(lib);
+		ofi_reg_dl_prov(lib, false);
 		free(lib);
 	}
+}
+
+static void ofi_load_preferred_dl_prov(const char *path)
+{
+	if (!path || !strlen(path))
+		return;
+
+	if (path[0] != '/') {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"invalid format for preferred provider: \"%s\"\n",
+			path);
+		return;
+	}
+
+	if (access(path, F_OK) != 0) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"preferred provider not found: \"%s\"\n",
+			path);
+		return;
+	}
+
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"loading preferred provider: \"%s\"\n", path);
+
+	prov_preferred = true;
+	ofi_reg_dl_prov(path, true);
+	prov_preferred = false;
 }
 
 static void ofi_load_dl_prov(void)
@@ -739,6 +786,11 @@ static void ofi_load_dl_prov(void)
 			"specified similar to dir1:dir2:dir3.  If the path "
 			"starts with @, loaded providers are given preference "
 			"based on discovery order, rather than version. "
+			"Optionally any of the dir can be replaced with + "
+			"followed by the full path to a provider library, "
+			"which specifies a preferred provider.  If registered "
+			"successfully, a preferred provider has priority over "
+			"other providers with the same name. "
 			"(default: " PROVDLDIR ")");
 
 	fi_param_get_str(NULL, "provider_path", &provdir);
@@ -765,10 +817,32 @@ static void ofi_load_dl_prov(void)
 	}
 
 	if (dirs) {
-		for (i = 0; dirs[i]; i++)
-			ofi_ini_dir(dirs[i]);
+		int num_dirs = 0;
+
+		for (i = 0; dirs[i]; i++) {
+			if (dirs[i][0] == '+') {
+				ofi_load_preferred_dl_prov(dirs[i]+1);
+			} else {
+				ofi_ini_dir(dirs[i]);
+				num_dirs++;
+			}
+		}
 
 		ofi_free_string_array(dirs);
+
+		if (num_dirs)
+			return;
+
+		/*
+		 * When FI_PROVIDER_PATH contains only preferred providers, go
+		 * back to search under the default path.
+		 */
+		dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+		if (dirs) {
+			for (i = 0; dirs[i]; i++)
+				ofi_ini_dir(dirs[i]);
+			ofi_free_string_array(dirs);
+		}
 	}
 }
 
@@ -898,16 +972,13 @@ void fi_ini(void)
 
 	ofi_register_provider(PSM3_INIT, NULL);
 	ofi_register_provider(PSM2_INIT, NULL);
+	ofi_register_provider(CXI_INIT, NULL);
 	ofi_register_provider(USNIC_INIT, NULL);
-	ofi_register_provider(GNI_INIT, NULL);
-	ofi_register_provider(BGQ_INIT, NULL);
-	ofi_register_provider(NETDIR_INIT, NULL);
 	ofi_register_provider(SHM_INIT, NULL);
 	ofi_register_provider(SM2_INIT, NULL);
 
 	ofi_register_provider(RXM_INIT, NULL);
 	ofi_register_provider(VERBS_INIT, NULL);
-	/* ofi_register_provider(RSTREAM_INIT, NULL); - no support */
 	ofi_register_provider(MRAIL_INIT, NULL);
 	ofi_register_provider(RXD_INIT, NULL);
 	ofi_register_provider(EFA_INIT, NULL);
@@ -1476,6 +1547,9 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 {
 	struct ofi_prov *prov;
 	const char *top_name;
+#ifdef HAVE_LIBDL
+	Dl_info dl_info;
+#endif
 	int ret;
 
 	if (!attr || !attr->prov_name || !attr->name)
@@ -1504,6 +1578,16 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 			attr->name);
 
 		ofi_hook_install(*fabric, fabric, prov->provider);
+
+#ifdef HAVE_LIBDL
+		if (dladdr(prov->provider->fabric, &dl_info))
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Using %s provider %u.%u, path:%s\n",
+				prov->prov_name,
+				FI_MAJOR(prov->provider->fi_version),
+				FI_MINOR(prov->provider->fi_version),
+				dl_info.dli_fname);
+#endif
 	}
 
 	return ret;

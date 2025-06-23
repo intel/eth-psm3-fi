@@ -304,6 +304,24 @@ uint32_t ofi_generate_seed(void)
 	return rand_seed;
 }
 
+uint64_t ofi_get_realtime_ns(void)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_REALTIME, &now);
+	return now.tv_sec * 1000000000 + now.tv_nsec;
+}
+
+uint64_t ofi_get_realtime_us(void)
+{
+	return ofi_get_realtime_ns() / 1000;
+}
+
+uint64_t ofi_get_realtime_ms(void)
+{
+	return ofi_get_realtime_ns() / 1000000;
+}
+
 uint64_t ofi_gettime_ns(void)
 {
 	struct timespec now;
@@ -1035,19 +1053,19 @@ size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
 	return len;
 }
 
-void ofi_straddr_log_internal(const char *func, int line,
+void ofi_straddr_log_internal(const char *func, int line, uint32_t addr_format,
 			      const struct fi_provider *prov,
 			      enum fi_log_level level,
 			      enum fi_log_subsys subsys, char *log_str,
 			      const void *addr)
 {
 	char buf[OFI_ADDRSTRLEN];
-	uint32_t addr_format;
 	size_t len = sizeof(buf);
 
 	if (fi_log_enabled(prov, level, subsys)) {
 		if (addr) {
-			addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
+			if (addr_format == FI_FORMAT_UNSPEC)
+				addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
 			fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
 			       ofi_straddr(buf, &len, addr_format, addr));
 		} else {
@@ -1403,6 +1421,9 @@ int ofi_bsock_async_done(const struct fi_provider *prov,
 	msg.msg_controllen = sizeof(ctrl);
 	ret = recvmsg(bsock->sock, &msg, MSG_ERRQUEUE);
 	if (ret < 0) {
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(errno))
+			return 0;
+
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Error reading MSG_ERRQUEUE (%s)\n", strerror(errno));
 		return -errno;
@@ -2367,13 +2388,19 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 		break;
 	case 4:
 	case 8:
-		speed_val = 8 * gbit_2_bit_coef;
+		speed_val = 10 * gbit_2_bit_coef;
 		break;
 	case 16:
 		speed_val = 14 * gbit_2_bit_coef;
 		break;
 	case 32:
 		speed_val = 25 * gbit_2_bit_coef;
+		break;
+	case 64:
+		speed_val = 50 * gbit_2_bit_coef;
+		break;
+	case 128:
+		speed_val = 100 * gbit_2_bit_coef;
 		break;
 	default:
 		speed_val = 0;
@@ -2393,6 +2420,9 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 	case 8:
 		width_val = 12;
 		break;
+	case 16:
+		width_val = 2;
+		break;
 	default:
 		width_val = 0;
 		break;
@@ -2402,4 +2432,4 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width)
 }
 
 /* log_prefix is used by fi_log and by prov/util */
-const char *log_prefix = "";
+OFI_THREAD_LOCAL const char *log_prefix = "";

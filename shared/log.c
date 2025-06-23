@@ -46,6 +46,11 @@
 #include "ofi_util.h"
 
 
+enum {
+	OFI_LOG_SUBSYS_MAX = 10,
+	OFI_LOG_MAX = 4
+};
+
 static const char * const log_subsys[] = {
 	[FI_LOG_CORE] = "core",
 	[FI_LOG_FABRIC] = "fabric",
@@ -57,7 +62,6 @@ static const char * const log_subsys[] = {
 	[FI_LOG_EQ] = "eq",
 	[FI_LOG_MR] = "mr",
 	[FI_LOG_CNTR] = "cntr",
-	[FI_LOG_SUBSYS_MAX] = NULL
 };
 
 static const char * const log_levels[] = {
@@ -65,14 +69,13 @@ static const char * const log_levels[] = {
 	[FI_LOG_TRACE] = "trace",
 	[FI_LOG_INFO] = "info",
 	[FI_LOG_DEBUG] = "debug",
-	[FI_LOG_MAX] = NULL
 };
 
 enum {
-	FI_LOG_SUBSYS_OFFSET	= FI_LOG_MAX,
-	FI_LOG_PROV_OFFSET	= FI_LOG_SUBSYS_OFFSET + FI_LOG_SUBSYS_MAX,
-	FI_LOG_LEVEL_MASK	= ((1 << FI_LOG_MAX) - 1),
-	FI_LOG_SUBSYS_MASK	= (((1 << FI_LOG_SUBSYS_MAX) - 1) <<
+	FI_LOG_SUBSYS_OFFSET	= OFI_LOG_MAX,
+	FI_LOG_PROV_OFFSET	= FI_LOG_SUBSYS_OFFSET + OFI_LOG_SUBSYS_MAX,
+	FI_LOG_LEVEL_MASK	= ((1 << OFI_LOG_MAX) - 1),
+	FI_LOG_SUBSYS_MASK	= (((1 << OFI_LOG_SUBSYS_MAX) - 1) <<
 				   FI_LOG_SUBSYS_OFFSET),
 //	FI_LOG_PROV_MASK	= (((1 << (64 - FI_LOG_PROV_OFFSET)) - 1) <<
 //				   FI_LOG_PROV_OFFSET)
@@ -131,7 +134,7 @@ void fi_log_init(void)
 			"Specify specific subsystem to log (default: all)");
 	fi_param_get_str(NULL, "log_subsys", &subsysstr);
 	ofi_create_filter(&subsys_filter, subsysstr);
-	for (i = 0; i < FI_LOG_SUBSYS_MAX; i++) {
+	for (i = 0; i < OFI_LOG_SUBSYS_MAX; i++) {
 		if (!ofi_apply_filter(&subsys_filter, log_subsys[i]))
 			log_mask |= (1ULL << (i + FI_LOG_SUBSYS_OFFSET));
 	}
@@ -298,7 +301,7 @@ unlock:
 
 void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level)
 {
-    if (level >= FI_LOG_MAX)
+    if (level > FI_LOG_DEBUG)
 	ofi_strncatf(buf, len, "Unknown");
     else
 	ofi_strncatf(buf, len, log_levels[level]);
@@ -306,7 +309,7 @@ void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level)
 
 void ofi_tostr_log_subsys(char *buf, size_t len, enum fi_log_subsys subsys)
 {
-    if (subsys >= FI_LOG_SUBSYS_MAX)
+    if (subsys > FI_LOG_CNTR)
 	ofi_strncatf(buf, len, "Unknown");
     else
 	ofi_strncatf(buf, len, log_subsys[subsys]);
@@ -317,7 +320,7 @@ void fi_log_fini(void)
 	ofi_free_filter(&prov_log_filter);
 }
 
-__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 		enum fi_log_level level,
 		enum fi_log_subsys subsys)
@@ -331,7 +334,7 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 }
 DEFAULT_SYMVER(fi_log_enabled_, fi_log_enabled, FABRIC_1.0);
 
-__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
 		enum fi_log_level level, enum fi_log_subsys subsys,
 		uint64_t *showtime)
@@ -345,7 +348,7 @@ int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
 }
 DEFAULT_SYMVER(fi_log_ready_, fi_log_ready, FABRIC_1.6);
 
-__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_level level,
 		enum fi_log_subsys subsys, const char *func, int line,
 		const char *fmt, ...)

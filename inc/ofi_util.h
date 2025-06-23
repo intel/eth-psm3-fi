@@ -835,6 +835,10 @@ static inline void ofi_ep_peer_rx_cntr_incerr(struct util_ep *ep, uint8_t op)
  * AV / addressing
  */
 
+#define ofi_av_straddr_log(av, level, ...) \
+	ofi_straddr_log_internal(__func__, __LINE__, av->domain->addr_format, \
+			av->prov, level, FI_LOG_AV, __VA_ARGS__)
+
 struct util_av;
 struct util_av_set;
 struct util_peer_addr;
@@ -875,9 +879,8 @@ struct util_av_entry {
 struct util_av {
 	struct fid_av		av_fid;
 	struct util_domain	*domain;
-	struct util_eq		*eq;
 	ofi_atomic32_t		ref;
-	ofi_mutex_t		lock;
+	struct ofi_genlock	lock;
 	const struct fi_provider *prov;
 
 	struct util_av_entry	*hash;
@@ -952,12 +955,15 @@ struct rxm_av {
 	struct fid_peer_av peer_av;
 	struct fid_av *util_coll_av;
 	struct fid_av *offload_coll_av;
+	void (*foreach_ep)(struct util_av *av, struct util_ep *util_ep);
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **fid_av, void *context, size_t conn_size,
 		     void (*remove_handler)(struct util_ep *util_ep,
-					    struct util_peer_addr *peer));
+					    struct util_peer_addr *peer),
+		     void (*foreach_ep)(struct util_av *av,
+					struct util_ep *ep));
 size_t rxm_av_max_peers(struct rxm_av *av);
 void rxm_ref_peer(struct util_peer_addr *peer);
 void *rxm_av_alloc_conn(struct rxm_av *av);
@@ -976,13 +982,11 @@ int ofi_av_close(struct util_av *av);
 int ofi_av_close_lightweight(struct util_av *av);
 
 size_t ofi_av_size(struct util_av *av);
+int ofi_av_insert_addr_at(struct util_av *av, const void *addr, fi_addr_t fi_addr);
 int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr);
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr);
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr);
-int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
-void ofi_av_write_event(struct util_av *av, uint64_t data,
-			int err, void *context);
 
 int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
@@ -1014,8 +1018,15 @@ int ofi_ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		     fi_addr_t *fi_addr, uint64_t flags, void *context);
 int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		     size_t count, uint64_t flags);
+bool ofi_ip_av_is_valid(struct fid_av *av_fid, fi_addr_t fi_addr);
 int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		     void *addr, size_t *addrlen);
+int ofi_ip_av_insertsym(struct fid_av *av_fid, const char *node,
+			size_t nodecnt, const char *service, size_t svccnt,
+			fi_addr_t *fi_addr, uint64_t flags, void *context);
+int ofi_ip_av_insertsvc(struct fid_av *av, const char *node,
+			const char *service, fi_addr_t *fi_addr,
+			uint64_t flags, void *context);
 const char *
 ofi_ip_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len);
 
@@ -1084,6 +1095,7 @@ const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 			    const void *err_data, char *buf, size_t len);
 
 int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format);
+int ofi_match_addr_format(uint32_t if_format, uint32_t user_format);
 int ofi_check_ep_type(const struct fi_provider *prov,
 		      const struct fi_ep_attr *prov_attr,
 		      const struct fi_ep_attr *user_attr);
@@ -1163,9 +1175,11 @@ void ofi_fabric_remove(struct util_fabric *fabric);
  * Utility Providers
  */
 
-#define OFI_NAME_DELIM	';'
+#define OFI_NAME_LNX_DELIM ':'
+#define OFI_NAME_DELIM ';'
 #define OFI_UTIL_PREFIX "ofi_"
 #define OFI_OFFLOAD_PREFIX "off_"
+#define OFI_LNX "lnx"
 
 static inline int ofi_has_util_prefix(const char *str)
 {
@@ -1175,6 +1189,16 @@ static inline int ofi_has_util_prefix(const char *str)
 static inline int ofi_has_offload_prefix(const char *str)
 {
 	return !strncasecmp(str, OFI_OFFLOAD_PREFIX, strlen(OFI_OFFLOAD_PREFIX));
+}
+
+static inline int ofi_is_lnx(const char *str)
+{
+	return !strncasecmp(str, OFI_LNX, strlen(OFI_LNX));
+}
+
+static inline int ofi_is_linked(const char *str)
+{
+	return (strcasestr(str, OFI_LNX)) ? 1 : 0;
 }
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
@@ -1192,6 +1216,7 @@ int ofi_get_core_info_fabric(const struct fi_provider *prov,
 			     struct fi_info **core_info);
 
 
+char *ofi_strdup_link_append(const char *head, const char *tail);
 char *ofi_strdup_append(const char *head, const char *tail);
 // char *ofi_strdup_head(const char *str);
 // char *ofi_strdup_tail(const char *str);

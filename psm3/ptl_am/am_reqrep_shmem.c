@@ -170,7 +170,9 @@ static void am_update_directory(struct am_ctl_nodeinfo *, size_t segsz);
 static
 void amsh_atexit()
 {
-	static atomic_int atexit_once = 0;
+	// one-time transition from 0/false -> 1/true.
+	// enforces that we process on-exit logic exactly once.
+	static atomic_int atexit_once;
 	int expected = 0;
 
 	psm2_ep_t ep;
@@ -620,13 +622,13 @@ static psm2_error_t amsh_init_segment(ptl_t *ptl_gen)
 		(((uintptr_t)ptl->self_nodeinfo->qdir.qreqFifoShort));
 	ptl->reqH.end = (am_pkt_short_t *)
 		(((uintptr_t)ptl->self_nodeinfo->qdir.qreqFifoShort) +
-		 ptl->qcounts.qreqFifoShort * ptl->qelemsz.qreqFifoShort);
+		 ptl->qcounts.qreqFifoShort * (uintptr_t)ptl->qelemsz.qreqFifoShort);
 
 	ptl->repH.head = ptl->repH.base = (am_pkt_short_t *)
 		(((uintptr_t)ptl->self_nodeinfo->qdir.qrepFifoShort));
 	ptl->repH.end = (am_pkt_short_t *)
 		(((uintptr_t)ptl->self_nodeinfo->qdir.qrepFifoShort) +
-		 ptl->qcounts.qrepFifoShort * ptl->qelemsz.qrepFifoShort);
+		 ptl->qcounts.qrepFifoShort * (uintptr_t)ptl->qelemsz.qrepFifoShort);
 
 	am_ctl_qhdr_init(&ptl->self_nodeinfo->qdir.qreqH->shortq,
 			 ptl->qcounts.qreqFifoShort,
@@ -1965,12 +1967,12 @@ void process_packet(ptl_t *ptl_gen, am_pkt_short_t *pkt, int isreq)
 				bulkptr =
 				    (uintptr_t) ptl->self_nodeinfo->qdir.
 				    qreqFifoLong;
-				bulkptr += bulkidx * ptl->qelemsz.qreqFifoLong;
+				bulkptr += bulkidx * (uintptr_t)ptl->qelemsz.qreqFifoLong;
 			} else {
 				bulkptr =
 				    (uintptr_t) ptl->self_nodeinfo->qdir.
 				    qrepFifoLong;
-				bulkptr += bulkidx * ptl->qelemsz.qrepFifoLong;
+				bulkptr += bulkidx * (uintptr_t)ptl->qelemsz.qrepFifoLong;
 			}
 			break;
 		default:

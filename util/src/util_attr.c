@@ -40,6 +40,20 @@
 #define OFI_RMA_DIRECTION_CAPS	(FI_READ | FI_WRITE | \
 				 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
+int ofi_match_addr_format(uint32_t if_format, uint32_t user_format)
+{
+	if (user_format == FI_FORMAT_UNSPEC || if_format == FI_FORMAT_UNSPEC)
+		return 1;
+
+	switch (user_format) {
+	case FI_SOCKADDR:
+		/* Provider supports INET and INET6 */
+		return if_format <= FI_SOCKADDR_IN6;
+	default:
+		return if_format == user_format;
+	}
+}
+
 int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC || prov_format == FI_FORMAT_UNSPEC)
@@ -79,7 +93,8 @@ char *ofi_strdup_tail(const char *str)
 }
 */
 
-char *ofi_strdup_append(const char *head, const char *tail)
+static char *ofi_strdup_append_internal(const char *head, const char *tail,
+					char delim)
 {
 	char *str;
 	size_t len;
@@ -87,8 +102,18 @@ char *ofi_strdup_append(const char *head, const char *tail)
 	len = strlen(head) + strlen(tail) + 2;
 	str = malloc(len);
 	if (str)
-		sprintf(str, "%s%c%s", head, OFI_NAME_DELIM, tail);
+		sprintf(str, "%s%c%s", head, delim, tail);
 	return str;
+}
+
+char *ofi_strdup_link_append(const char *head, const char *tail)
+{
+	return ofi_strdup_append_internal(head, tail, OFI_NAME_LNX_DELIM);
+}
+
+char *ofi_strdup_append(const char *head, const char *tail)
+{
+	return ofi_strdup_append_internal(head, tail, OFI_NAME_DELIM);
 }
 
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
@@ -434,16 +459,12 @@ static int fi_thread_level(enum fi_threading thread_model)
 	switch (thread_model) {
 	case FI_THREAD_SAFE:
 		return 1;
-	case FI_THREAD_FID:
-		return 2;
-	case FI_THREAD_ENDPOINT:
-		return 3;
 	case FI_THREAD_COMPLETION:
-		return 4;
+		return 2;
 	case FI_THREAD_DOMAIN:
-		return 5;
+		return 3;
 	case FI_THREAD_UNSPEC:
-		return 6;
+		return 4;
 	default:
 		return -1;
 	}
@@ -500,7 +521,7 @@ static int ofi_cap_mr_mode(uint64_t info_caps, int mr_mode)
 		mr_mode &= ~OFI_MR_MODE_RMA_TARGET;
 	}
 
-	return mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	return mr_mode & ~(OFI_MR_BASIC | OFI_MR_SCALABLE);
 }
 
 /*
@@ -514,38 +535,38 @@ int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 	int ret = -FI_ENODATA;
 
 	if ((prov_mode & FI_MR_LOCAL) &&
-	    !((user_info->mode & FI_LOCAL_MR) || (user_mode & FI_MR_LOCAL)))
+	    !((user_info->mode & OFI_LOCAL_MR) || (user_mode & FI_MR_LOCAL)))
 		goto out;
 
 	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
 		switch (user_mode) {
-		case FI_MR_UNSPEC:
-			if (!(prov_mode & (FI_MR_SCALABLE | FI_MR_BASIC)))
+		case OFI_MR_UNSPEC:
+			if (!(prov_mode & (OFI_MR_SCALABLE | OFI_MR_BASIC)))
 				goto out;
 			break;
-		case FI_MR_BASIC:
-			if (!(prov_mode & FI_MR_BASIC))
+		case OFI_MR_BASIC:
+			if (!(prov_mode & OFI_MR_BASIC))
 				goto out;
 			break;
-		case FI_MR_SCALABLE:
-			if (!(prov_mode & FI_MR_SCALABLE))
+		case OFI_MR_SCALABLE:
+			if (!(prov_mode & OFI_MR_SCALABLE))
 				goto out;
 			break;
 		default:
 			goto out;
 		}
 	} else {
-		if (user_mode & FI_MR_BASIC) {
-			if ((user_mode & ~FI_MR_BASIC) ||
-			    !(prov_mode & FI_MR_BASIC))
+		if (user_mode & OFI_MR_BASIC) {
+			if ((user_mode & ~OFI_MR_BASIC) ||
+			    !(prov_mode & OFI_MR_BASIC))
 				goto out;
-		} else if (user_mode & FI_MR_SCALABLE) {
-			if ((user_mode & ~FI_MR_SCALABLE) ||
-			    !(prov_mode & FI_MR_SCALABLE))
+		} else if (user_mode & OFI_MR_SCALABLE) {
+			if ((user_mode & ~OFI_MR_SCALABLE) ||
+			    !(prov_mode & OFI_MR_SCALABLE))
 				goto out;
 		} else {
 			prov_mode = ofi_cap_mr_mode(user_info->caps, prov_mode);
-			if (user_mode != FI_MR_UNSPEC &&
+			if (user_mode != OFI_MR_UNSPEC &&
 			    (user_mode & prov_mode) != prov_mode)
 				goto out;
 		}
@@ -573,16 +594,9 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (fi_progress_level(user_attr->control_progress) <
-	    fi_progress_level(prov_attr->control_progress)) {
-		FI_INFO(prov, FI_LOG_CORE, "Invalid control progress model\n");
-		return -FI_ENODATA;
-	}
-
-	if (user_attr->data_progress == FI_PROGRESS_CONTROL_UNIFIED ||
-	    fi_progress_level(user_attr->data_progress) <
-	    fi_progress_level(prov_attr->data_progress)) {
-		FI_INFO(prov, FI_LOG_CORE, "Invalid data progress model\n");
+	if (fi_progress_level(user_attr->progress) <
+	    fi_progress_level(prov_attr->progress)) {
+		FI_INFO(prov, FI_LOG_CORE, "Invalid progress model\n");
 		return -FI_ENODATA;
 	}
 
@@ -845,7 +859,6 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		      const struct fi_rx_attr *user_attr, uint64_t info_mode)
 {
 	const struct fi_rx_attr *prov_attr = prov_info->rx_attr;
-	int rm_enabled = (prov_info->domain_attr->resource_mgmt == FI_RM_ENABLED);
 
 	if (user_attr->caps & ~OFI_IGNORED_RX_CAPS)
 		FI_INFO(prov, FI_LOG_CORE, "Tx only caps ignored in Rx caps\n");
@@ -877,14 +890,14 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
+	if (user_attr->comp_order) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
 		OFI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->total_buffered_recv > prov_attr->total_buffered_recv) {
+	if (user_attr->total_buffered_recv) {
 		FI_INFO(prov, FI_LOG_CORE, "total_buffered_recv too large\n");
 		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
 				    total_buffered_recv);
@@ -901,15 +914,6 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		FI_INFO(prov, FI_LOG_CORE, "iov_limit too large\n");
 		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, iov_limit);
 		return -FI_ENODATA;
-	}
-
-	if (!rm_enabled &&
-	    user_attr->total_buffered_recv > prov_attr->total_buffered_recv) {
-		/* Just log a notification, but ignore the value */
-		FI_INFO(prov, FI_LOG_CORE,
-			"Total buffered recv size exceeds supported size\n");
-		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
-				    total_buffered_recv);
 	}
 
 	return 0;
@@ -975,7 +979,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
+	if (user_attr->comp_order) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
 		OFI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
@@ -1192,13 +1196,13 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 	int hints_mr_mode;
 
 	hints_mr_mode = hints ? hints->mr_mode : 0;
-	if (hints_mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
+	if (hints_mr_mode & (OFI_MR_BASIC | OFI_MR_SCALABLE)) {
 		attr->mr_mode = hints_mr_mode;
 	} else if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-		attr->mr_mode = (attr->mr_mode && attr->mr_mode != FI_MR_SCALABLE) ?
-				FI_MR_BASIC : FI_MR_SCALABLE;
+		attr->mr_mode = (attr->mr_mode && attr->mr_mode != OFI_MR_SCALABLE) ?
+				OFI_MR_BASIC : OFI_MR_SCALABLE;
 	} else {
-		attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
+		attr->mr_mode &= ~(OFI_MR_BASIC | OFI_MR_SCALABLE);
 
 		if (hints &&
 		    ((hints_mr_mode & attr->mr_mode) != attr->mr_mode)) {
@@ -1213,10 +1217,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 
 	if (hints->threading)
 		attr->threading = hints->threading;
-	if (hints->control_progress)
-		attr->control_progress = hints->control_progress;
-	if (hints->data_progress)
-		attr->data_progress = hints->data_progress;
+	if (hints->progress)
+		attr->progress = hints->progress;
 	if (hints->av_type)
 		attr->av_type = hints->av_type;
 	if (hints->max_ep_auth_key)
@@ -1255,7 +1257,6 @@ static void fi_alter_rx_attr(struct fi_rx_attr *attr,
 		return;
 
 	attr->op_flags = hints->op_flags;
-	attr->total_buffered_recv = hints->total_buffered_recv;
 	if (hints->size)
 		attr->size = hints->size;
 	if (hints->iov_limit)
@@ -1305,8 +1306,8 @@ static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 	user_mode = user_info->domain_attr->mr_mode;
 
 	if ((FI_VERSION_LT(api_version, FI_VERSION(1,5)) &&
-	    (user_mode == FI_MR_UNSPEC)) ||
-	    (user_mode == FI_MR_BASIC) ||
+	    (user_mode == OFI_MR_UNSPEC)) ||
+	    (user_mode == OFI_MR_BASIC) ||
 	    ((user_mode & prov_mode & OFI_MR_MODE_RMA_TARGET) ==
 	     (prov_mode & OFI_MR_MODE_RMA_TARGET)))
 		return caps;
@@ -1331,8 +1332,8 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		if ((info->domain_attr->mr_mode & FI_MR_LOCAL) &&
 		    (FI_VERSION_LT(api_version, FI_VERSION(1, 5)) ||
 		     (hints && hints->domain_attr &&
-		      (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)))))
-			info->mode |= FI_LOCAL_MR;
+		      (hints->domain_attr->mr_mode & (OFI_MR_BASIC | OFI_MR_SCALABLE)))))
+			info->mode |= OFI_LOCAL_MR;
 
 		if (hints)
 			info->handle = hints->handle;

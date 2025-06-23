@@ -129,7 +129,6 @@ extern struct fi_provider psmx3_prov;
 #define PSMX3_RMA_ORDER_SIZE	(4096)
 #define PSMX3_MSG_ORDER		(FI_ORDER_SAS | OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | \
 				 OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET)
-#define PSMX3_COMP_ORDER	FI_ORDER_NONE
 
 /*
  * Four bits are reserved from the 64-bit tag space as a flags to identify the
@@ -558,7 +557,7 @@ struct psmx3_fid_domain {
 	uint64_t		mode;
 	uint64_t		caps;
 
-	enum fi_mr_mode		mr_mode;
+	int			mr_mode;
 	ofi_spin_t		mr_lock;
 	uint64_t		mr_reserved_key;
 	RbtHandle		mr_map;

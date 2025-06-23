@@ -40,6 +40,9 @@
 /* CUDA support */
 #undef HAVE_CUDA
 
+/* CUDA dmabuf support */
+#undef HAVE_CUDA_DMABUF
+
 /* Define to 1 if you have the <cuda_runtime.h> header file. */
 #undef HAVE_CUDA_RUNTIME_H
 
@@ -127,6 +130,12 @@
 
 /* Define to 1 if you have the <linux/userfaultfd.h> header file. */
 #undef HAVE_LINUX_USERFAULTFD_H
+
+/* Ignore HAVE_LNX */
+#undef HAVE_LNX
+
+/* Ignore HAVE_LNX_DL */
+#undef HAVE_LNX_DL
 
 /* Ignore HAVE_MEMHOOKS_MONITOR */
 #undef HAVE_MEMHOOKS_MONITOR
@@ -271,6 +280,9 @@
 
 /* Ignore HAVE_UFFD_MONITOR */
 #undef HAVE_UFFD_MONITOR
+
+/* Define to 1 if platform supports userfault fd thread id */
+#undef HAVE_UFFD_THREAD_ID
 
 /* Define to 1 if platform supports userfault fd unmap */
 #undef HAVE_UFFD_UNMAP

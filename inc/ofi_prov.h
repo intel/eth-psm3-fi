@@ -178,21 +178,6 @@ RXD_INI ;
 #  define RXD_INIT NULL
 #endif
 
-#ifdef _WIN32
-#if (HAVE_NETDIR) && (HAVE_NETDIR_DL)
-#  define NETDIR_INI FI_EXT_INI
-#  define NETDIR_INIT NULL
-#elif (HAVE_NETDIR)
-#  define NETDIR_INI INI_SIG(fi_netdir_ini)
-#  define NETDIR_INIT fi_netdir_ini()
-NETDIR_INI ;
-#else
-#  define NETDIR_INIT NULL
-#endif
-#else /* _WIN32 */
-#  define NETDIR_INIT NULL
-#endif /* _WIN32 */
-
 #if (HAVE_SHM) && (HAVE_SHM_DL)
 #  define SHM_INI FI_EXT_INI
 #  define SHM_INIT NULL
@@ -224,6 +209,17 @@ SM2_INI ;
 MRAIL_INI ;
 #else
 #  define MRAIL_INIT NULL
+#endif
+
+#if (HAVE_LNX) && (HAVE_LNX_DL)
+#  define LNX_INI FI_EXT_INI
+#  define LNX_INIT NULL
+#elif (HAVE_LNX)
+#  define LNX_INI INI_SIG(fi_lnx_ini)
+#  define LNX_INIT fi_lnx_ini()
+LNX_INI ;
+#else
+#  define LNX_INIT NULL
 #endif
 
 #if (HAVE_PERF) && (HAVE_PERF_DL)
@@ -319,6 +315,21 @@ OPX_INI ;
 UCX_INI ;
 #else
 #  define UCX_INIT NULL
+#endif
+
+#if defined(_WIN32) && (HAVE_LPP)
+#  define LPP_INIT NULL
+#else
+#  if (HAVE_LPP) && (HAVE_LPP_DL)
+#    define LPP_INI FI_EXT_INI
+#    define LPP_INIT NULL
+#  elif (HAVE_LPP)
+#    define LPP_INI INI_SIG(fi_lpp_ini)
+#    define LPP_INIT fi_lpp_ini()
+LPP_INI ;
+#  else
+#    define LPP_INIT NULL
+#  endif
 #endif
 
 #ifndef COLL_INIT

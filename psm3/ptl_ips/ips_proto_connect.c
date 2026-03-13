@@ -949,7 +949,7 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 	case OPCODE_DISCONNECT_REQUEST:
 		if (! force)
 			hdr->connidx |= IPS_DISCONNECT_NOFORCE;
-		/* FALLSTHROUGH */
+		/* FALLTHROUGH */
 	case OPCODE_DISCONNECT_REPLY:
 		paylen = sizeof(struct ips_connect_hdr);
 		// placeholder, typically ips_connect_hdr is sufficient
@@ -2835,7 +2835,7 @@ psm3_ips_proto_disconnect(struct ips_proto *proto, int force, int numep,
 					psmi_assert(ipsaddr->reconnecting);
 					psmi_assert(! ipsaddr->waiting_in_connect);
 					psmi_assert(ipsaddr->waiting_in_disconnect);
-					/* FALLSTHROUGH */
+					/* FALLTHROUGH */
 				case CSTATE_ESTABLISHED:
 					psmi_assert(ipsaddr->waiting_in_disconnect);
 					/* Still pending acks, hold off for now */

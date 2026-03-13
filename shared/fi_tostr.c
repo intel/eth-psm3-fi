@@ -917,7 +917,7 @@ ofi_tostr_cq_err_entry(char *buf, size_t len,
 	ofi_strncatf(buf, len, "%serr_data_size: %zu\n", TAB, entry->err_data_size);
 }
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 				     const void *data, enum fi_type datatype)
 {
@@ -1046,7 +1046,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 }
 DEFAULT_SYMVER(fi_tostr_r_, fi_tostr_r, FABRIC_1.4);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
 	static char *buf = NULL;

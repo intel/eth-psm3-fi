@@ -389,14 +389,14 @@ ofi_dup_info_err_free_base:						\
 /*
  * ABI 1.0
  */
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_0(struct fi_info_1_0 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_0, fi_freeinfo, FABRIC_1.0);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_0 *fi_dupinfo_1_0(const struct fi_info_1_0 *info)
 {
 	struct fi_info *dup;
@@ -477,7 +477,7 @@ fail:
 }
 COMPAT_SYMVER(fi_dupinfo_1_0, fi_dupinfo, FABRIC_1.0);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
 		    uint64_t flags, const struct fi_info_1_0 *hints_1_0,
 		    struct fi_info_1_0 **info)
@@ -500,7 +500,7 @@ int fi_getinfo_1_0(uint32_t version, const char *node, const char *service,
 }
 COMPAT_SYMVER(fi_getinfo_1_0, fi_getinfo, FABRIC_1.0);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_fabric_1_0(struct fi_fabric_attr_1_0 *attr_1_0,
 		  struct fid_fabric **fabric, void *context)
 {
@@ -524,14 +524,14 @@ COMPAT_SYMVER(fi_fabric_1_0, fi_fabric, FABRIC_1.0);
 /*
  * ABI 1.1
  */
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_1(struct fi_info_1_1 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_1, fi_freeinfo, FABRIC_1.1);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_1 *fi_dupinfo_1_1(const struct fi_info_1_1 *info)
 {
 	struct fi_info *dup, *base;
@@ -550,7 +550,7 @@ struct fi_info_1_1 *fi_dupinfo_1_1(const struct fi_info_1_1 *info)
 }
 COMPAT_SYMVER(fi_dupinfo_1_1, fi_dupinfo, FABRIC_1.1);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_getinfo_1_1(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info_1_1 *hints_1_1,
 		   struct fi_info_1_1 **info)
@@ -576,14 +576,14 @@ COMPAT_SYMVER(fi_getinfo_1_1, fi_getinfo, FABRIC_1.1);
 /*
  * ABI 1.2
  */
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_2(struct fi_info_1_2 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_2, fi_freeinfo, FABRIC_1.2);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_2 *fi_dupinfo_1_2(const struct fi_info_1_2 *info)
 {
 	struct fi_info *dup, *base;
@@ -602,7 +602,7 @@ struct fi_info_1_2 *fi_dupinfo_1_2(const struct fi_info_1_2 *info)
 }
 COMPAT_SYMVER(fi_dupinfo_1_2, fi_dupinfo, FABRIC_1.2);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_getinfo_1_2(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info_1_2 *hints_1_2,
 		   struct fi_info_1_2 **info)
@@ -628,14 +628,14 @@ COMPAT_SYMVER(fi_getinfo_1_2, fi_getinfo, FABRIC_1.2);
 /*
  * ABI 1.3
  */
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_3(struct fi_info_1_3 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_3, fi_freeinfo, FABRIC_1.3);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_3 *fi_dupinfo_1_3(const struct fi_info_1_3 *info)
 {
 	struct fi_info *dup, *base;
@@ -654,7 +654,7 @@ struct fi_info_1_3 *fi_dupinfo_1_3(const struct fi_info_1_3 *info)
 }
 COMPAT_SYMVER(fi_dupinfo_1_3, fi_dupinfo, FABRIC_1.3);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_getinfo_1_3(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info_1_3 *hints_1_3,
 		   struct fi_info_1_3 **info)
@@ -680,14 +680,14 @@ COMPAT_SYMVER(fi_getinfo_1_3, fi_getinfo, FABRIC_1.3);
 /*
  * ABI 1.7
  */
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void fi_freeinfo_1_7(struct fi_info_1_7 *info)
 {
 	fi_freeinfo((struct fi_info *) info);
 }
 COMPAT_SYMVER(fi_freeinfo_1_7, fi_freeinfo, FABRIC_1.7);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 struct fi_info_1_7 *fi_dupinfo_1_7(const struct fi_info_1_7 *info)
 {
 	struct fi_info *dup, *base;
@@ -706,7 +706,7 @@ struct fi_info_1_7 *fi_dupinfo_1_7(const struct fi_info_1_7 *info)
 }
 COMPAT_SYMVER(fi_dupinfo_1_7, fi_dupinfo, FABRIC_1.7);
 
-//__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int fi_getinfo_1_7(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info_1_7 *hints_1_7,
 		   struct fi_info_1_7 **info)
